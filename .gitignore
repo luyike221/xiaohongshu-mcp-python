@@ -176,6 +176,8 @@ Thumbs.db
 
 # Project specific
 cookies/
+cookies.json
+user_sessions.json
 screenshots/
 logs/
 temp/

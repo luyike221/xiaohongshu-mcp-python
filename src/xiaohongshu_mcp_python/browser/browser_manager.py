@@ -140,9 +140,23 @@ class BrowserManager:
         """加载 cookies（公共方法）"""
         await self._load_cookies()
     
-    async def save_cookies(self) -> None:
+    async def save_cookies(self) -> bool:
         """保存 cookies（公共方法）"""
-        await self._save_cookies()
+        return await self._save_cookies()
+    
+    async def _save_cookies(self) -> bool:
+        """保存 cookies"""
+        if self._context is None:
+            return False
+        
+        try:
+            cookies = await self._context.cookies()
+            ok = await self.cookie_storage.save_cookies(cookies)
+            logger.info(f"保存了 {len(cookies)} 个 cookies")
+            return ok
+        except Exception as e:
+            logger.error(f"保存 cookies 失败: {e}")
+            return False
     
     async def _load_cookies(self) -> None:
         """加载 cookies"""
@@ -156,18 +170,6 @@ class BrowserManager:
                 logger.info(f"加载了 {len(cookies)} 个 cookies")
         except Exception as e:
             logger.warning(f"加载 cookies 失败: {e}")
-    
-    async def _save_cookies(self) -> None:
-        """保存 cookies"""
-        if self._context is None:
-            return
-        
-        try:
-            cookies = await self._context.cookies()
-            await self.cookie_storage.save_cookies(cookies)
-            logger.info(f"保存了 {len(cookies)} 个 cookies")
-        except Exception as e:
-            logger.error(f"保存 cookies 失败: {e}")
     
     async def __aenter__(self):
         """异步上下文管理器入口"""

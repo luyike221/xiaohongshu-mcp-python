@@ -172,9 +172,22 @@ class PageController:
         """
         logger.debug("等待页面稳定")
         try:
+            # 首先等待网络空闲
             await self.page.wait_for_load_state("networkidle", timeout=timeout)
+            logger.debug("页面网络空闲状态达成")
         except PlaywrightTimeoutError:
-            logger.warning("等待页面稳定超时")
+            logger.warning("等待页面网络空闲超时，尝试其他等待策略")
+            try:
+                # 如果网络空闲失败，尝试等待DOM内容加载完成
+                await self.page.wait_for_load_state("domcontentloaded", timeout=min(timeout, 5000))
+                logger.debug("页面DOM内容加载完成")
+                
+                # 额外等待一小段时间让页面渲染完成
+                await asyncio.sleep(1)
+                logger.debug("页面额外等待完成")
+            except PlaywrightTimeoutError:
+                logger.warning("所有页面稳定性等待策略都超时")
+                # 不抛出异常，让调用方决定如何处理
     
     async def scroll_to_element(self, selector: str, timeout: Optional[int] = None) -> None:
         """

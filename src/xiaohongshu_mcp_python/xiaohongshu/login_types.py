@@ -64,17 +64,19 @@ class LoginConfig:
     """登录配置"""
     xiaohongshu_url: str = "https://www.xiaohongshu.com/explore"
     login_check_selector: str = ".main-container .user .link-wrapper .channel"
-    qrcode_selector: str = ".login-container .qrcode-img"
+    qrcode_selector: str = '//img[contains(@class, "qrcode-img")]'  # 使用用户提供的XPath
     login_success_selector: str = ".main-container .user .link-wrapper .channel"
     
     # 超时配置（秒）
-    page_load_timeout: int = 30
+    page_load_timeout: int = 45  # 增加页面加载超时时间
     login_wait_timeout: int = 300  # 5分钟
-    qrcode_timeout: int = 60
+    qrcode_timeout: int = 90  # 增加二维码获取超时时间
+    page_stable_timeout: int = 15  # 页面稳定等待超时时间
+    element_check_timeout: int = 10  # 元素检查超时时间
     
     # 轮询间隔（毫秒）
-    login_check_interval: int = 500
+    login_check_interval: int = 3000  # 3秒检查间隔，避免过于频繁的请求
     
     # 重试配置
     max_retries: int = 3
-    retry_delay: int = 2  # 秒
+    retry_delay: int = 3  # 增加重试延迟
