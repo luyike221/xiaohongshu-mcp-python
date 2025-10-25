@@ -160,11 +160,30 @@ class UserSessionManager:
         if user_session:
             session_id = user_session["session_id"]
             
-            # 2. 清理登录会话
-            await self.login_session_manager.remove_session(session_id)
+            # 2. 清理登录会话（不保存Cookie）
+            await self.login_session_manager.remove_session(session_id, save_cookies=False)
             
-            # 3. 清理用户会话映射
+            # 3. 清理 cookie 文件（在关闭浏览器之后）
+            try:
+                from ..storage.cookie_storage import CookieStorage
+                cookie_storage = CookieStorage()
+                cookie_storage.clear_cookies()
+                logger.info(f"成功清理用户 {username} 的 cookie 文件")
+            except Exception as e:
+                logger.warning(f"清理 cookie 文件失败: {e}")
+            
+            # 4. 清理用户会话映射
             await self.user_storage.remove_user_session(username)
+            
+            # 5. 如果没有其他活跃会话，清理共享浏览器
+            try:
+                remaining_sessions = await self.user_storage.load_user_sessions()
+                if not remaining_sessions:
+                    # 没有其他用户会话，可以安全关闭共享浏览器（不保存Cookie）
+                    await self.login_session_manager.cleanup_all(save_cookies=False)
+                    logger.info(f"已清理共享浏览器资源")
+            except Exception as e:
+                logger.warning(f"清理共享浏览器失败: {e}")
             
             logger.info(f"成功清理用户 {username} 的会话 {session_id}")
             return True

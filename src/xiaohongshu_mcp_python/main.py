@@ -14,7 +14,6 @@ from xiaohongshu_mcp_python.storage.cookie_storage import CookieStorage
 from xiaohongshu_mcp_python.browser.browser_manager import BrowserManager
 from xiaohongshu_mcp_python.xiaohongshu.simple_login_manager import SimpleLoginManager
 from xiaohongshu_mcp_python.xiaohongshu.login_types import LoginStatus
-from xiaohongshu_mcp_python.xiaohongshu.login_session_manager import get_session_manager
 from xiaohongshu_mcp_python.managers.user_session_manager import UserSessionManager
 
 
@@ -22,7 +21,7 @@ from xiaohongshu_mcp_python.managers.user_session_manager import UserSessionMana
 mcp = FastMCP("xiaohongshu-mcp-server")
 
 # 全局配置
-GLOBAL_HEADLESS = True  # 默认为无头模式
+GLOBAL_HEADLESS = False  # 默认为有头模式
 GLOBAL_USER = "luyike"  # 当前用户名
 
 # 全局用户会话管理器实例
@@ -46,8 +45,7 @@ def cli_main():
     parser.add_argument("--log-level", default="INFO", help="日志级别")
     parser.add_argument("--host", default="127.0.0.1", help="HTTP 服务器主机地址")
     parser.add_argument("--port", type=int, default=8000, help="HTTP 服务器端口")
-    parser.add_argument("--headless", action="store_true", default=True, help="使用无头模式 (默认: True)")
-    parser.add_argument("--no-headless", action="store_false", dest="headless", help="使用有头模式")
+    parser.add_argument("--headless", action="store_true", default=False, help="使用无头模式")
     
     args = parser.parse_args()
     
@@ -126,12 +124,11 @@ async def xiaohongshu_start_login_session(headless: bool = False, fresh: bool = 
 
 
 @mcp.tool
-async def xiaohongshu_check_login_session(session_id: Optional[str] = None, username: Optional[str] = None) -> dict:
+async def xiaohongshu_check_login_session(username: Optional[str] = None) -> dict:
     """
-    检查登录会话状态（支持按会话ID或用户名查询）
+    检查登录会话状态（基于用户名查询）
     
     Args:
-        session_id: 登录会话ID（可选）
         username: 用户名（可选，如果不提供则使用全局用户）
         
     Returns:
@@ -139,54 +136,28 @@ async def xiaohongshu_check_login_session(session_id: Optional[str] = None, user
     """
     try:
         user_session_manager = get_user_session_manager()
+        current_user = username or GLOBAL_USER
+        user_session_status = await user_session_manager.get_user_session_status(current_user)
         
-        if session_id:
-            # 按会话ID查询（兼容旧接口）
-            session_manager = get_session_manager()
-            result = await session_manager.check_session(session_id)
-            
-            if result is None:
-                return {
-                    "success": False,
-                    "status": "not_found",
-                    "message": f"会话 {session_id} 不存在或已过期"
-                }
-            
-            status, message, cookies_saved = result
-            
+        if not user_session_status:
             return {
-                "success": True,
-                "session_id": session_id,
-                "status": status,
-                "message": message,
-                "cookies_saved": cookies_saved,
-                "logged_in": status == "logged_in",
-                "initializing": status == "initializing"
-            }
-        else:
-            # 按用户名查询
-            current_user = username or GLOBAL_USER
-            user_session_status = await user_session_manager.get_user_session_status(current_user)
-            
-            if not user_session_status:
-                return {
-                    "success": False,
-                    "status": "no_session",
-                    "username": current_user,
-                    "message": f"用户 {current_user} 没有活跃会话"
-                }
-            
-            return {
-                "success": True,
-                "session_id": user_session_status["session_id"],
+                "success": False,
+                "status": "no_session",
                 "username": current_user,
-                "status": user_session_status["status"],
-                "message": f"用户 {current_user} 的会话状态: {user_session_status['status']}",
-                "logged_in": user_session_status["status"] == "logged_in",
-                "initializing": user_session_status["status"] == "initializing",
-                "user_info": user_session_status["user_info"],
-                "cookies_saved": user_session_status["cookies_saved"]
+                "message": f"用户 {current_user} 没有活跃会话"
             }
+        
+        return {
+            "success": True,
+            "session_id": user_session_status["session_id"],
+            "username": current_user,
+            "status": user_session_status["status"],
+            "message": f"用户 {current_user} 的会话状态: {user_session_status['status']}",
+            "logged_in": user_session_status["status"] == "logged_in",
+            "initializing": user_session_status["status"] == "initializing",
+            "user_info": user_session_status["user_info"],
+            "cookies_saved": user_session_status["cookies_saved"]
+        }
         
     except Exception as e:
         logger.error(f"检查登录会话失败: {e}")
@@ -198,12 +169,11 @@ async def xiaohongshu_check_login_session(session_id: Optional[str] = None, user
 
 
 @mcp.tool
-async def xiaohongshu_cleanup_login_session(session_id: Optional[str] = None, username: Optional[str] = None) -> dict:
+async def xiaohongshu_cleanup_login_session(username: Optional[str] = None) -> dict:
     """
-    清理登录会话（支持按会话ID或用户名清理）
+    清理登录会话（基于用户名）
     
     Args:
-        session_id: 登录会话ID（可选）
         username: 用户名（可选，如果不提供则使用全局用户）
         
     Returns:
@@ -211,27 +181,14 @@ async def xiaohongshu_cleanup_login_session(session_id: Optional[str] = None, us
     """
     try:
         user_session_manager = get_user_session_manager()
+        current_user = username or GLOBAL_USER
+        success = await user_session_manager.cleanup_user_session(current_user)
         
-        if session_id:
-            # 按会话ID清理（兼容旧接口）
-            session_manager = get_session_manager()
-            await session_manager.remove_session(session_id)
-            
-            return {
-                "success": True,
-                "session_id": session_id,
-                "message": f"会话 {session_id} 已清理"
-            }
-        else:
-            # 按用户名清理
-            current_user = username or GLOBAL_USER
-            success = await user_session_manager.cleanup_user_session(current_user)
-            
-            return {
-                "success": success,
-                "username": current_user,
-                "message": f"用户 {current_user} 的会话已清理" if success else f"清理用户 {current_user} 的会话失败"
-            }
+        return {
+            "success": success,
+            "username": current_user,
+            "message": f"用户 {current_user} 的会话已清理" if success else f"清理用户 {current_user} 的会话失败"
+        }
         
     except Exception as e:
         logger.error(f"清理登录会话失败: {e}")

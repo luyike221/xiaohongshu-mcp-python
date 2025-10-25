@@ -33,14 +33,30 @@ class PageController:
         """
         logger.info(f"导航到: {url}")
         try:
+            # 检查页面是否仍然有效
+            if self.page.is_closed():
+                logger.error("页面已关闭，无法导航")
+                raise Exception("页面已关闭，需要重新初始化浏览器")
+            
             await self.page.goto(url, wait_until=wait_until, timeout=self.default_timeout)
             logger.info("页面加载完成")
         except PlaywrightTimeoutError:
             logger.error(f"导航超时: {url}")
             raise
         except Exception as e:
+            error_msg = str(e)
+            if "Target page, context or browser has been closed" in error_msg or "page.is_closed" in error_msg:
+                logger.error("浏览器或页面已关闭，需要重新初始化")
+                raise Exception("浏览器已关闭，需要重新初始化")
             logger.error(f"导航失败: {e}")
             raise
+    
+    def is_page_valid(self) -> bool:
+        """检查页面是否仍然有效"""
+        try:
+            return not self.page.is_closed()
+        except Exception:
+            return False
     
     async def wait_for_element(
         self, 

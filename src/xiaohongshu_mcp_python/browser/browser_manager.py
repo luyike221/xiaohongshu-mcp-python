@@ -47,6 +47,53 @@ class BrowserManager:
         """检查浏览器是否已启动"""
         return self._playwright is not None and self._browser is not None
     
+    def is_valid(self) -> bool:
+        """检查浏览器是否仍然有效（未关闭）"""
+        try:
+            if not self.is_started():
+                return False
+            # 检查浏览器是否已关闭
+            if self._browser and hasattr(self._browser, 'is_connected'):
+                return self._browser.is_connected()
+            # 检查页面是否有效
+            if self._page and hasattr(self._page, 'is_closed'):
+                return not self._page.is_closed()
+            return True
+        except Exception:
+            return False
+    
+    async def ensure_started(self) -> None:
+        """确保浏览器已启动且有效，如果无效则重启"""
+        if not self.is_valid():
+            logger.warning("浏览器无效或已关闭，正在重启...")
+            await self.restart()
+    
+    async def restart(self, load_cookies: bool = True) -> None:
+        """
+        重启浏览器
+        
+        Args:
+            load_cookies: 是否在重启后加载cookies，默认为True
+        """
+        logger.info("重启浏览器")
+        await self.stop()
+        
+        # 临时保存原始的cookie_storage，以便在不加载cookies时使用空的存储
+        original_cookie_storage = None
+        if not load_cookies:
+            original_cookie_storage = self.cookie_storage
+            # 创建一个临时的空cookie存储
+            from ..storage.cookie_storage import CookieStorage
+            self.cookie_storage = CookieStorage(cookie_path="/tmp/empty_cookies.json")
+        
+        await self.start()
+        
+        # 恢复原始的cookie_storage
+        if original_cookie_storage:
+            self.cookie_storage = original_cookie_storage
+        
+        logger.info("浏览器重启完成")
+    
     async def start(self) -> None:
         """启动浏览器"""
         if self._playwright is not None:
@@ -96,15 +143,21 @@ class BrowserManager:
         
         logger.info("浏览器启动成功")
     
-    async def stop(self) -> None:
-        """停止浏览器"""
-        if self._playwright is None:
+    async def stop(self, save_cookies: bool = True) -> None:
+        """
+        停止浏览器
+        
+        Args:
+            save_cookies: 是否保存cookies，默认为True
+        """
+        if not self.is_started():
             return
         
         logger.info("停止浏览器")
         
-        # 保存 cookies
-        await self._save_cookies()
+        # 根据参数决定是否保存 cookies
+        if save_cookies:
+            await self._save_cookies()
         
         if self._page:
             await self._page.close()
@@ -126,6 +179,7 @@ class BrowserManager:
     
     async def get_page(self) -> Page:
         """获取页面实例"""
+        await self.ensure_started()
         if self._page is None:
             await self.start()
         return self._page
@@ -143,6 +197,67 @@ class BrowserManager:
     async def save_cookies(self) -> bool:
         """保存 cookies（公共方法）"""
         return await self._save_cookies()
+    
+    async def clear_all_data(self) -> bool:
+        """
+        清除浏览器的所有数据（cookies、缓存、本地存储等）
+        
+        Returns:
+            是否清除成功
+        """
+        if not self.is_started():
+            logger.warning("浏览器未启动，无法清除数据")
+            return False
+        
+        try:
+            # 清除浏览器上下文中的所有数据
+            if self._context:
+                # 清除 cookies
+                await self._context.clear_cookies()
+                
+                # 清除本地存储和会话存储
+                if self._page:
+                    # 清除 localStorage
+                    await self._page.evaluate("() => { localStorage.clear(); }")
+                    # 清除 sessionStorage
+                    await self._page.evaluate("() => { sessionStorage.clear(); }")
+                    # 清除 indexedDB
+                    await self._page.evaluate("""
+                        () => {
+                            if (window.indexedDB) {
+                                return new Promise((resolve) => {
+                                    const databases = indexedDB.databases ? indexedDB.databases() : Promise.resolve([]);
+                                    databases.then(dbs => {
+                                        const deletePromises = dbs.map(db => {
+                                            return new Promise((deleteResolve) => {
+                                                const deleteReq = indexedDB.deleteDatabase(db.name);
+                                                deleteReq.onsuccess = () => deleteResolve();
+                                                deleteReq.onerror = () => deleteResolve();
+                                            });
+                                        });
+                                        Promise.all(deletePromises).then(() => resolve());
+                                    }).catch(() => resolve());
+                                });
+                            }
+                        }
+                    """)
+                
+                # 清除缓存（如果支持）
+                try:
+                    await self._context.clear_permissions()
+                except Exception as e:
+                    logger.debug(f"清除权限失败（可能不支持）: {e}")
+            
+            # 清除本地 cookie 文件
+            if self.cookie_storage:
+                self.cookie_storage.clear_cookies()
+            
+            logger.info("已清除浏览器的所有数据")
+            return True
+            
+        except Exception as e:
+            logger.error(f"清除浏览器数据失败: {e}")
+            return False
     
     async def _save_cookies(self) -> bool:
         """保存 cookies"""

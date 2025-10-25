@@ -54,12 +54,17 @@ class LoginSession:
             self.message = f"检查失败: {str(e)}"
             return self.status, self.message, False
     
-    async def cleanup(self):
-        """清理会话资源"""
+    async def cleanup(self, save_cookies: bool = True):
+        """
+        清理会话资源
+        
+        Args:
+            save_cookies: 是否保存cookies，默认为True
+        """
         try:
             if self._cleanup_task:
                 self._cleanup_task.cancel()
-            await self.login_manager.cleanup()
+            await self.login_manager.cleanup(save_cookies=save_cookies)
         except Exception as e:
             logger.error(f"清理登录会话失败: {e}")
     
@@ -158,14 +163,30 @@ class LoginSessionManager:
             
         try:
             # 初始化登录管理器
+            session.status = "initializing"
             session.message = "正在启动浏览器..."
-            await session.login_manager.initialize()
+            
+            # 确保浏览器有效，如果无效则重启
+            try:
+                await session.login_manager.initialize()
+            except Exception as e:
+                error_msg = str(e)
+                if "浏览器已关闭" in error_msg or "需要重新初始化" in error_msg:
+                    logger.warning(f"会话 {session_id}: 浏览器已关闭，尝试重启")
+                    # 在fresh模式下重启时不加载cookies
+                    await session.login_manager.browser_manager.restart(load_cookies=not fresh)
+                    await session.login_manager.initialize()
+                    logger.info(f"会话 {session_id}: 浏览器重启后重新初始化成功")
+                else:
+                    raise
             
             # 检查是否已有有效的登录状态（仅在非fresh模式或共享浏览器时）
             if not fresh or self._shared_browser_manager:
                 try:
                     session.message = "正在检查登录状态..."
-                    if await session.login_manager.is_logged_in(navigate=True):
+                    # 在fresh模式下不导航到网站，避免重新创建Cookie
+                    navigate_to_site = not fresh
+                    if await session.login_manager.is_logged_in(navigate=navigate_to_site):
                         session.status = "logged_in"
                         session.message = "已登录，无需重新登录"
                         logger.info(f"会话 {session_id}: 检测到已有登录状态，跳过登录流程")
@@ -192,9 +213,20 @@ class LoginSessionManager:
                 session.message = "请扫描二维码登录"
                 logger.info(f"会话 {session_id}: 已打开登录弹窗")
             except Exception as e:
-                session.status = "failed"
-                session.message = f"打开登录弹窗失败: {str(e)}"
-                logger.warning(f"会话 {session_id}: 打开登录弹窗失败: {e}")
+                error_msg = str(e)
+                if "浏览器已关闭" in error_msg or "需要重新初始化" in error_msg:
+                    logger.warning(f"会话 {session_id}: 打开登录弹窗时浏览器已关闭，尝试重启")
+                    # 在fresh模式下重启时不加载cookies
+                    await session.login_manager.browser_manager.restart(load_cookies=not fresh)
+                    await session.login_manager.initialize()
+                    await session.login_manager.open_login_modal()
+                    session.status = "waiting"
+                    session.message = "请扫描二维码登录"
+                    logger.info(f"会话 {session_id}: 浏览器重启后成功打开登录弹窗")
+                else:
+                    session.status = "failed"
+                    session.message = f"打开登录弹窗失败: {str(e)}"
+                    logger.warning(f"会话 {session_id}: 打开登录弹窗失败: {e}")
             
         except Exception as e:
             session.status = "failed"
@@ -217,22 +249,37 @@ class LoginSessionManager:
         
         return await session.check_status()
     
-    async def remove_session(self, session_id: str):
-        """移除会话"""
+    async def remove_session(self, session_id: str, save_cookies: bool = True):
+        """
+        移除会话
+        
+        Args:
+            session_id: 会话ID
+            save_cookies: 是否保存cookies，默认为True
+        """
         session = self.sessions.get(session_id)
         if session:
-            await session.cleanup()
+            await session.cleanup(save_cookies=save_cookies)
             del self.sessions[session_id]
             logger.info(f"移除登录会话: {session_id}")
     
-    async def cleanup_all(self):
-        """清理所有会话"""
+    async def cleanup_all(self, save_cookies: bool = True):
+        """
+        清理所有会话
+        
+        Args:
+            save_cookies: 是否保存cookies，默认为True
+        """
         for session_id in list(self.sessions.keys()):
-            await self.remove_session(session_id)
+            await self.remove_session(session_id, save_cookies=save_cookies)
         
         # 清理共享的浏览器管理器
         if self._shared_browser_manager and self._shared_browser_manager.is_started():
-            await self._shared_browser_manager.stop()
+            # 如果不保存cookies，则彻底清除所有浏览器数据
+            if not save_cookies:
+                await self._shared_browser_manager.clear_all_data()
+            
+            await self._shared_browser_manager.stop(save_cookies=save_cookies)
             self._shared_browser_manager = None
             self._shared_cookie_storage = None
         

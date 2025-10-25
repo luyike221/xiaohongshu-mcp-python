@@ -44,11 +44,16 @@ class SimpleLoginManager:
         # 不在此处主动加载 cookies，避免重复加载
         logger.info("简化登录管理器初始化完成")
 
-    async def cleanup(self) -> None:
-        """关闭浏览器并清理资源"""
+    async def cleanup(self, save_cookies: bool = True) -> None:
+        """
+        关闭浏览器并清理资源
+        
+        Args:
+            save_cookies: 是否保存cookies，默认为True
+        """
         # 如果是共享浏览器，不要关闭它
         if not self.shared_browser and self.browser_manager.is_started():
-            await self.browser_manager.stop()
+            await self.browser_manager.stop(save_cookies=save_cookies)
         logger.info("简化登录管理器资源清理完成")
 
     async def is_logged_in(self, navigate: bool = False) -> bool:
