@@ -179,6 +179,7 @@ class XiaohongshuService:
             # 执行视频发布
             return await self._publish_video(
                 title=content.title,
+                content=content.content,
                 video_path=content.video_path,
                 cover_path=content.cover_path,
                 tags=content.tags or [],
@@ -393,6 +394,7 @@ class XiaohongshuService:
     async def _publish_video(
         self,
         title: str,
+        content: str,
         video_path: str,
         cover_path: Optional[str],
         tags: List[str],
@@ -404,6 +406,7 @@ class XiaohongshuService:
         
         Args:
             title: 标题
+            content: 正文内容
             video_path: 视频路径
             cover_path: 封面路径
             tags: 标签列表
@@ -425,6 +428,7 @@ class XiaohongshuService:
         # 创建视频发布内容
         video_content = PublishVideoContent(
             title=title,
+            content=content,
             video_path=video_path,
             cover_path=cover_path,
             tags=tags

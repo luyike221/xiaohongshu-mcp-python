@@ -246,6 +246,7 @@ class PublishImageContent(BaseModel):
 class PublishVideoContent(BaseModel):
     """发布视频内容"""
     title: str = Field(..., min_length=1, max_length=20, description="标题，1-20个字符")
+    content: str = Field(..., description="正文内容")
     video_path: str = Field(..., description="视频文件路径")
     cover_path: Optional[str] = Field(default=None, description="封面图片路径")
     tags: Optional[List[str]] = Field(default=None, description="标签列表")

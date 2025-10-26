@@ -136,7 +136,7 @@ class PublishAction:
             # 填写内容
             if context:
                 await context.report_progress(progress=70, total=100)
-            await self._fill_content(content.title, "", content.tags or [])
+            await self._fill_content(content.title, content.content, content.tags or [])
             
             # 点击发布按钮
             if context:
@@ -420,7 +420,8 @@ class PublishAction:
             content: 正文内容
             tags: 标签列表
         """
-        logger.info("填写发布内容")
+        logger.info(f"填写发布内容: 标题={title}, 正文={content}, 标签={tags}")
+        
         
         # 填写标题
         await self._input_title(title)
