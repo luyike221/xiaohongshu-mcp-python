@@ -245,3 +245,15 @@ class UserSessionManager:
             存储信息
         """
         return self.user_storage.get_storage_info()
+
+
+# 全局用户会话管理器实例
+_global_user_session_manager: Optional[UserSessionManager] = None
+
+
+def get_user_session_manager() -> UserSessionManager:
+    """获取全局用户会话管理器实例"""
+    global _global_user_session_manager
+    if _global_user_session_manager is None:
+        _global_user_session_manager = UserSessionManager()
+    return _global_user_session_manager

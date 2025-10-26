@@ -21,7 +21,8 @@ class PageController:
             page: Playwright 页面实例
         """
         self.page = page
-        self.default_timeout = 30000  # 30秒
+        from ..config import BrowserConfig
+        self.default_timeout = BrowserConfig.ELEMENT_TIMEOUT
     
     async def navigate(self, url: str, wait_until: str = "domcontentloaded") -> None:
         """

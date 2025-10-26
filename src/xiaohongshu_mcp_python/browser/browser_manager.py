@@ -108,14 +108,10 @@ class BrowserManager:
         browser_launcher = getattr(self._playwright, self.browser_type)
         
         # 浏览器启动参数
+        from ..config import BrowserConfig
         launch_options = {
             "headless": self.headless,
-            "args": [
-                "--no-sandbox",
-                "--disable-blink-features=AutomationControlled",
-                "--disable-web-security",
-                "--disable-features=VizDisplayCompositor"
-            ]
+            "args": BrowserConfig.BROWSER_ARGS
         }
         
         # 如果指定了用户数据目录
@@ -126,11 +122,8 @@ class BrowserManager:
         
         # 创建浏览器上下文
         context_options = {
-            "viewport": {"width": 1920, "height": 1080},
-            "user_agent": (
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-                "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-            )
+            "viewport": {"width": BrowserConfig.VIEWPORT_WIDTH, "height": BrowserConfig.VIEWPORT_HEIGHT},
+            "user_agent": BrowserConfig.USER_AGENT
         }
         
         self._context = await self._browser.new_context(**context_options)
@@ -293,4 +286,8 @@ class BrowserManager:
     
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         """异步上下文管理器出口"""
+        await self.stop()
+    
+    async def cleanup(self) -> None:
+        """清理浏览器资源（别名方法）"""
         await self.stop()

@@ -199,5 +199,347 @@ async def xiaohongshu_cleanup_login_session(username: Optional[str] = None) -> d
         }
 
 
+@mcp.tool
+async def xiaohongshu_publish_content(
+    title: str,
+    content: str,
+    images: list[str],
+    tags: Optional[list[str]] = None,
+    username: Optional[str] = None,
+    context: Optional[Context] = None
+) -> dict:
+    """
+    发布小红书图文内容
+    
+    Args:
+        title: 内容标题（最多20个中文字或英文单词）
+        content: 正文内容，不包含以#开头的标签内容
+        images: 图片路径列表（至少需要1张图片）。支持HTTP/HTTPS图片链接或本地图片绝对路径
+        tags: 话题标签列表（可选），如 ["美食", "旅行", "生活"]
+        username: 用户名（可选，如果不提供则使用全局用户）
+        
+    Returns:
+        发布结果
+    """
+    try:
+        from .service import XiaohongshuService
+        from .types import PublishImageContent
+        from .browser import BrowserManager
+        
+        current_user = username or GLOBAL_USER
+        user_session_manager = get_user_session_manager()
+        
+        # 发送进度通知：开始检查登录状态
+        if context:
+            await context.report_progress(
+                progress=10,
+                total=100
+            )
+        
+        # 检查用户会话状态
+        user_session_status = await user_session_manager.get_user_session_status(current_user)
+        if not user_session_status or user_session_status["status"] != "logged_in":
+            return {
+                "success": False,
+                "error": "用户未登录",
+                "message": f"用户 {current_user} 未登录，请先使用 xiaohongshu_start_login_session 登录"
+            }
+        
+        # 发送进度通知：开始启动浏览器
+        if context:
+            await context.report_progress(
+                progress=20,
+                total=100
+            )
+        
+        # 创建浏览器管理器和服务实例
+        browser_manager = BrowserManager()
+        await browser_manager.start()
+        
+        try:
+            service = XiaohongshuService(browser_manager)
+            
+            # 发送进度通知：开始发布内容
+            if context:
+                await context.report_progress(
+                    progress=40,
+                    total=100
+                )
+            
+            # 构建发布请求
+            publish_request = PublishImageContent(
+                title=title,
+                content=content,
+                images=images,
+                tags=tags or []
+            )
+            
+            # 执行发布
+            result = await service.publish_content(publish_request, current_user)
+            
+            # 发送进度通知：发布完成
+            if context:
+                await context.report_progress(
+                    progress=100,
+                    total=100
+                )
+            
+            return {
+                "success": result.success,
+                "result": result.dict() if hasattr(result, 'dict') else result.__dict__,
+                "message": result.message if hasattr(result, 'message') else "内容发布完成"
+            }
+            
+        finally:
+            await browser_manager.stop()
+        
+    except Exception as e:
+        logger.error(f"发布内容失败: {e}")
+        return {
+            "success": False,
+            "error": str(e),
+            "message": "发布内容失败"
+        }
+
+
+@mcp.tool
+async def xiaohongshu_search_feeds(
+    keyword: str,
+    username: Optional[str] = None
+) -> dict:
+    """
+    搜索小红书内容
+    
+    Args:
+        keyword: 搜索关键词
+        username: 用户名（可选，如果不提供则使用全局用户）
+        
+    Returns:
+        搜索结果
+    """
+    try:
+        from .service import XiaohongshuService
+        from .browser import BrowserManager
+        
+        current_user = username or GLOBAL_USER
+        user_session_manager = get_user_session_manager()
+        
+        # 检查用户会话状态
+        user_session_status = await user_session_manager.get_user_session_status(current_user)
+        if not user_session_status or user_session_status["status"] != "logged_in":
+            return {
+                "success": False,
+                "error": "用户未登录",
+                "message": f"用户 {current_user} 未登录，请先使用 xiaohongshu_start_login_session 登录"
+            }
+        
+        # 创建浏览器管理器和服务实例
+        browser_manager = BrowserManager()
+        await browser_manager.start()
+        
+        try:
+            service = XiaohongshuService(browser_manager)
+            
+            # 执行搜索
+            result = await service.search_content(keyword, username=current_user)
+            
+            return {
+                "success": True,
+                "result": result.dict() if hasattr(result, 'dict') else result.__dict__,
+                "message": f"搜索关键词 '{keyword}' 成功"
+            }
+            
+        finally:
+            await browser_manager.stop()
+        
+    except Exception as e:
+        logger.error(f"搜索内容失败: {e}")
+        return {
+            "success": False,
+            "error": str(e),
+            "message": "搜索内容失败"
+        }
+
+
+@mcp.tool
+async def xiaohongshu_get_feeds(
+    username: Optional[str] = None
+) -> dict:
+    """
+    获取推荐内容列表
+    
+    Args:
+        username: 用户名（可选，如果不提供则使用全局用户）
+        
+    Returns:
+        推荐内容列表
+    """
+    try:
+        from .service import XiaohongshuService
+        from .browser import BrowserManager
+        
+        current_user = username or GLOBAL_USER
+        user_session_manager = get_user_session_manager()
+        
+        # 检查用户会话状态
+        user_session_status = await user_session_manager.get_user_session_status(current_user)
+        if not user_session_status or user_session_status["status"] != "logged_in":
+            return {
+                "success": False,
+                "error": "用户未登录",
+                "message": f"用户 {current_user} 未登录，请先使用 xiaohongshu_start_login_session 登录"
+            }
+        
+        # 创建浏览器管理器和服务实例
+        browser_manager = BrowserManager()
+        await browser_manager.start()
+        
+        try:
+            service = XiaohongshuService(browser_manager)
+            
+            # 获取推荐内容
+            result = await service.get_feeds_list(username=current_user)
+            
+            return {
+                "success": True,
+                "result": result.dict() if hasattr(result, 'dict') else result.__dict__,
+                "message": "获取推荐内容成功"
+            }
+            
+        finally:
+            await browser_manager.stop()
+        
+    except Exception as e:
+        logger.error(f"获取推荐内容失败: {e}")
+        return {
+            "success": False,
+            "error": str(e),
+            "message": "获取推荐内容失败"
+        }
+
+
+@mcp.tool
+async def xiaohongshu_get_user_profile(
+    user_id: str,
+    username: Optional[str] = None
+) -> dict:
+    """
+    获取小红书用户主页信息
+    
+    Args:
+        user_id: 用户ID
+        username: 用户名（可选，如果不提供则使用全局用户）
+        
+    Returns:
+        用户主页信息
+    """
+    try:
+        from .service import XiaohongshuService
+        from .browser import BrowserManager
+        
+        current_user = username or GLOBAL_USER
+        user_session_manager = get_user_session_manager()
+        
+        # 检查用户会话状态
+        user_session_status = await user_session_manager.get_user_session_status(current_user)
+        if not user_session_status or user_session_status["status"] != "logged_in":
+            return {
+                "success": False,
+                "error": "用户未登录",
+                "message": f"用户 {current_user} 未登录，请先使用 xiaohongshu_start_login_session 登录"
+            }
+        
+        # 创建浏览器管理器和服务实例
+        browser_manager = BrowserManager()
+        await browser_manager.start()
+        
+        try:
+            service = XiaohongshuService(browser_manager)
+            
+            # 获取用户资料
+            result = await service.get_user_profile(user_id, username=current_user)
+            
+            return {
+                "success": True,
+                "result": result.dict() if hasattr(result, 'dict') else result.__dict__,
+                "message": f"获取用户 {user_id} 的资料成功"
+            }
+            
+        finally:
+            await browser_manager.stop()
+        
+    except Exception as e:
+        logger.error(f"获取用户资料失败: {e}")
+        return {
+            "success": False,
+            "error": str(e),
+            "message": "获取用户资料失败"
+        }
+
+
+@mcp.tool
+async def xiaohongshu_get_feed_detail(
+    feed_id: str,
+    username: Optional[str] = None
+) -> dict:
+    """
+    获取小红书笔记详情
+    
+    Args:
+        feed_id: 笔记ID
+        username: 用户名（可选，如果不提供则使用全局用户）
+        
+    Returns:
+        笔记详情信息
+    """
+    try:
+        from .service import XiaohongshuService
+        from .browser import BrowserManager
+        
+        current_user = username or GLOBAL_USER
+        user_session_manager = get_user_session_manager()
+        
+        # 检查用户会话状态
+        user_session_status = await user_session_manager.get_user_session_status(current_user)
+        if not user_session_status or user_session_status["status"] != "logged_in":
+            return {
+                "success": False,
+                "error": "用户未登录",
+                "message": f"用户 {current_user} 未登录，请先使用 xiaohongshu_start_login_session 登录"
+            }
+        
+        # 创建浏览器管理器和服务实例
+        browser_manager = BrowserManager()
+        await browser_manager.start()
+        
+        try:
+            service = XiaohongshuService(browser_manager)
+            
+            # 获取笔记详情
+            result = await service.get_feed_detail(feed_id, username=current_user)
+            
+            return {
+                "success": True,
+                "result": result.dict() if hasattr(result, 'dict') else result.__dict__,
+                "message": f"获取笔记 {feed_id} 的详情成功"
+            }
+            
+        finally:
+            await browser_manager.stop()
+        
+    except Exception as e:
+        logger.error(f"获取笔记详情失败: {e}")
+        return {
+            "success": False,
+            "error": str(e),
+            "message": "获取笔记详情失败"
+        }
+
+
+def main():
+    """主函数，用于外部调用"""
+    cli_main()
+
+
 if __name__ == "__main__":
     cli_main()

@@ -19,7 +19,8 @@ dependencies = [
 ]
 
 [project.scripts]
-xiaohongshu-mcp = "xiaohongshu_mcp_python.main:cli_main"
+xiaohongshu-mcp = "xiaohongshu_mcp_python.main:main"
+xiaohongshu-mcp-server = "xiaohongshu_mcp_python.app:main"
 
 [project.optional-dependencies]
 dev = [

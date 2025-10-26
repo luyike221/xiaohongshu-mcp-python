@@ -1,14 +1,23 @@
 """
-小红书功能模块
-
-提供小红书网站的各种操作功能，包括：
-- 用户登录管理
-- 内容发布
-- 搜索功能
-- 用户信息获取
+小红书操作模块
+提供小红书相关的自动化操作功能
 """
 
+from .publish import PublishAction
+from .search import SearchAction
+from .feeds import FeedsAction
+from .user import UserAction
 from .login_manager import LoginManager
-from .login_types import LoginStatus, QRCodeInfo
+from .simple_login_manager import SimpleLoginManager
+from .login_types import LoginStatus, LoginResult
 
-__all__ = ["LoginManager", "LoginStatus", "QRCodeInfo"]
+__all__ = [
+    "PublishAction",
+    "SearchAction", 
+    "FeedsAction",
+    "UserAction",
+    "LoginManager",
+    "SimpleLoginManager",
+    "LoginStatus",
+    "LoginResult",
+]
