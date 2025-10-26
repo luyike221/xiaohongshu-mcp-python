@@ -182,7 +182,7 @@ screenshots/
 logs/
 temp/
 tmp/
-
+test/
 # Playwright
 test-results/
 playwright-report/
