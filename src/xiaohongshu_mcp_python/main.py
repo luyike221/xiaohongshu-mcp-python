@@ -303,6 +303,109 @@ async def xiaohongshu_publish_content(
 
 
 @mcp.tool
+async def xiaohongshu_publish_video(
+    title: str,
+    content: str,
+    video: str,
+    tags: Optional[list[str]] = None,
+    username: Optional[str] = None,
+    context: Optional[Context] = None
+) -> dict:
+    """
+    发布小红书视频内容
+    
+    Args:
+        title: 视频标题（最多20个中文字或英文单词）
+        content: 正文内容，不包含以#开头的标签内容
+        video: 视频文件路径。支持本地视频文件绝对路径
+        tags: 话题标签列表（可选），如 ["美食", "旅行", "生活"]
+        username: 用户名（可选，如果不提供则使用全局用户）
+        
+    Returns:
+        发布结果
+    """
+    try:
+        from .service import XiaohongshuService
+        from .types import PublishVideoContent
+        from .browser import BrowserManager
+        
+        current_user = username or GLOBAL_USER
+        user_session_manager = get_user_session_manager()
+        
+        # 发送进度通知：开始检查登录状态
+        if context:
+            await context.report_progress(
+                progress=10,
+                total=100
+            )
+        
+        # 检查用户会话状态
+        user_session_status = await user_session_manager.get_user_session_status(current_user)
+        if not user_session_status or user_session_status["status"] != "logged_in":
+            return {
+                "success": False,
+                "error": "用户未登录",
+                "message": f"用户 {current_user} 未登录，请先使用 xiaohongshu_start_login_session 登录"
+            }
+        
+        # 发送进度通知：开始启动浏览器
+        if context:
+            await context.report_progress(
+                progress=20,
+                total=100
+            )
+        
+        # 创建浏览器管理器和服务实例
+        browser_manager = BrowserManager()
+        await browser_manager.start()
+        
+        try:
+            service = XiaohongshuService(browser_manager)
+            
+            # 发送进度通知：开始发布视频
+            if context:
+                await context.report_progress(
+                    progress=40,
+                    total=100
+                )
+            
+            # 构建发布请求
+            publish_request = PublishVideoContent(
+                title=title,
+                video_path=video,
+                content=content,
+                tags=tags or []
+            )
+            
+            # 执行发布
+            result = await service.publish_video(publish_request, current_user, context)
+            
+            # 发送进度通知：发布完成
+            if context:
+                await context.report_progress(
+                    progress=100,
+                    total=100
+                )
+            
+            return {
+                "success": result.success,
+                "result": result.dict() if hasattr(result, 'dict') else result.__dict__,
+                "message": result.message if hasattr(result, 'message') else "视频发布完成"
+            }
+            
+        finally:
+            await browser_manager.stop()
+        
+    except Exception as e:
+        logger.error(f"发布视频失败: {e}")
+        return {
+            "success": False,
+            "error": str(e),
+            "message": "发布视频失败"
+        }
+
+
+@mcp.tool
 async def xiaohongshu_search_feeds(
     keyword: str,
     username: Optional[str] = None

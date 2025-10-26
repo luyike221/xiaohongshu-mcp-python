@@ -74,7 +74,7 @@ class PublishAction:
             # 点击发布按钮
             if context:
                 await context.report_progress(progress=90, total=100)
-            await self._click_publish_button()
+            await self._click_publish_button(is_video=False)
             
             # 等待发布完成
             if context:
@@ -99,12 +99,13 @@ class PublishAction:
                 error="PUBLISH_FAILED"
             )
     
-    async def publish_video(self, content: PublishVideoContent) -> PublishResponse:
+    async def publish_video(self, content: PublishVideoContent, context: Optional[Context] = None) -> PublishResponse:
         """
         发布视频内容
         
         Args:
             content: 视频内容
+            context: 上下文对象，用于进度报告
             
         Returns:
             发布结果
@@ -113,22 +114,42 @@ class PublishAction:
             logger.info(f"开始发布视频内容: {content.title}")
             
             # 导航到发布页面
-            await self._navigate_to_publish_page()
+            if context:
+                await context.report_progress(progress=10, total=100)
+            await self._navigate_to_publish_page(context)
             
             # 选择视频发布标签
+            if context:
+                await context.report_progress(progress=20, total=100)
             await self._select_video_publish_tab()
             
             # 上传视频
+            if context:
+                await context.report_progress(progress=30, total=100)
             await self._upload_video(content.video_path, content.cover_path)
             
+            # 等待视频上传完成
+            if context:
+                await context.report_progress(progress=60, total=100)
+            await self._wait_for_video_upload_complete()
+            
             # 填写内容
+            if context:
+                await context.report_progress(progress=70, total=100)
             await self._fill_content(content.title, "", content.tags or [])
             
             # 点击发布按钮
-            await self._click_publish_button()
+            if context:
+                await context.report_progress(progress=90, total=100)
+            await self._click_publish_button(is_video=True)
             
             # 等待发布完成
+            if context:
+                await context.report_progress(progress=95, total=100)
             note_id = await self._wait_for_publish_complete()
+            
+            if context:
+                await context.report_progress(progress=100, total=100)
             
             logger.info(f"视频发布成功: {note_id}")
             return PublishResponse(
@@ -270,7 +291,7 @@ class PublishAction:
         try:
             # 等待视频上传输入框
             video_input = await self.page.wait_for_selector(
-                "input[type='file'][accept*='video']",
+                "//input[@class='upload-input']",
                 timeout=BrowserConfig.ELEMENT_TIMEOUT
             )
             
@@ -359,7 +380,7 @@ class PublishAction:
         """等待视频上传完成"""
         logger.info("等待视频上传完成")
         
-        timeout = BrowserConfig.UPLOAD_TIMEOUT * 3  # 视频上传时间更长
+        timeout = 5 * 60 * 1000  # 5分钟超时时间（毫秒）
         start_time = asyncio.get_event_loop().time()
         
         while True:
@@ -367,11 +388,20 @@ class PublishAction:
             if (current_time - start_time) * 1000 > timeout:
                 raise Exception("等待视频上传完成超时")
             
-            # 检查上传进度或完成状态
-            upload_complete = await self.page.query_selector(".upload-complete")
-            if upload_complete:
-                logger.info("视频上传完成")
-                break
+            # 检查发布按钮是否可点击（视频上传完成的标志）
+            publish_button = await self.page.query_selector(XiaohongshuSelectors.VIDEO_PUBLISH_BUTTON)
+            if publish_button:
+                # 检查按钮是否可见
+                is_visible = await publish_button.is_visible()
+                if is_visible:
+                    # 检查按钮是否被禁用
+                    is_disabled = await publish_button.is_disabled()
+                    if not is_disabled:
+                        # 检查按钮class是否包含disabled
+                        class_name = await publish_button.get_attribute("class")
+                        if class_name and "disabled" not in class_name:
+                            logger.info("视频上传完成，发布按钮可点击")
+                            break
             
             # 检查是否有错误
             error_element = await self.page.query_selector(XiaohongshuSelectors.ERROR_MESSAGE)
@@ -499,22 +529,26 @@ class PublishAction:
         except PlaywrightTimeoutError:
             logger.warning(f"输入标签超时: {tag}")
     
-    async def _click_publish_button(self):
+    async def _click_publish_button(self, is_video: bool = False):
         """点击发布按钮"""
         logger.info("点击发布按钮")
         
+        # 根据发布类型选择不同的按钮选择器
+        selector = XiaohongshuSelectors.VIDEO_PUBLISH_BUTTON if is_video else XiaohongshuSelectors.IMAGE_PUBLISH_BUTTON
+        
         try:
             publish_button = await self.page.wait_for_selector(
-                XiaohongshuSelectors.PUBLISH_BUTTON,
+                selector,
                 timeout=BrowserConfig.ELEMENT_TIMEOUT
             )
             
             if publish_button:
-                # 多次点击发布按钮，增加成功率
-                for i in range(3):
-                    await publish_button.click()
-                    logger.info(f"第{i+1}次点击发布按钮")
-                    await asyncio.sleep(1)  # 每次点击后等待1秒
+                # 点击发布按钮
+                await publish_button.click()
+                logger.info("点击发布按钮成功")
+                
+                # 等待一下，让页面有时间响应
+                await asyncio.sleep(2)
                 
                 logger.info("已完成发布按钮点击")
             else:

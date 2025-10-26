@@ -289,16 +289,53 @@ uv run flake8 src tests
 
 ## 🔧 可用 MCP 工具
 
-| 工具名称 | 功能描述 | 必需参数 |
-|---------|---------|---------|
-| `check_login_status` | 检查登录状态 | 无 |
-| `publish_content` | 发布图文内容 | title, content, images |
-| `publish_video` | 发布视频内容 | title, content, video |
-| `search_content` | 搜索小红书内容 | keyword |
-| `get_recommendations` | 获取推荐列表 | 无 |
-| `get_post_detail` | 获取帖子详情 | post_id, xsec_token |
-| `post_comment` | 发表评论 | post_id, xsec_token, content |
-| `get_user_profile` | 获取用户主页 | user_id, xsec_token |
+| 工具名称 | 功能描述 | 必需参数 | 可选参数 |
+|---------|---------|---------|---------|
+| `xiaohongshu_start_login_session` | 启动登录会话 | 无 | username |
+| `xiaohongshu_check_login_session` | 检查登录状态 | 无 | username |
+| `xiaohongshu_cleanup_login_session` | 清理登录会话 | 无 | username |
+| `xiaohongshu_publish_content` | 发布图文内容 | title, content, images | tags, username |
+| `xiaohongshu_publish_video` | 发布视频内容 | title, content, video | tags, username |
+| `xiaohongshu_search_feeds` | 搜索小红书内容 | keyword | username |
+| `xiaohongshu_get_feeds` | 获取推荐列表 | 无 | username |
+| `xiaohongshu_get_user_profile` | 获取用户主页 | user_id | username |
+| `xiaohongshu_get_feed_detail` | 获取笔记详情 | feed_id | username |
+
+### 📝 工具详细说明
+
+#### `xiaohongshu_publish_video` - 视频发布工具
+
+发布视频内容到小红书平台。
+
+**参数说明：**
+- `title` (必需): 视频标题，最多20个中文字或英文单词
+- `content` (必需): 视频描述内容，不包含以#开头的标签内容  
+- `video` (必需): 视频文件路径，支持本地视频文件绝对路径
+- `tags` (可选): 话题标签列表，如 ["美食", "旅行", "生活"]
+- `username` (可选): 用户名，如果不提供则使用全局用户
+
+**使用示例：**
+```python
+# 通过 MCP 客户端调用
+result = await xiaohongshu_publish_video(
+    title="我的旅行视频",
+    content="分享一段美好的旅行时光",
+    video="/path/to/my_video.mp4",
+    tags=["旅行", "生活", "美好时光"]
+)
+```
+
+**返回结果：**
+```json
+{
+    "success": true,
+    "message": "视频发布完成",
+    "result": {
+        "note_id": "视频笔记ID",
+        "success": true
+    }
+}
+```
 
 ## ⚠️ 注意事项
 

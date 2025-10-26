@@ -130,7 +130,8 @@ class XiaohongshuService:
     async def publish_video(
         self,
         content: PublishVideoContent,
-        username: Optional[str] = None
+        username: Optional[str] = None,
+        context: Optional[Context] = None
     ) -> PublishResponse:
         """
         发布视频内容
@@ -181,7 +182,8 @@ class XiaohongshuService:
                 video_path=content.video_path,
                 cover_path=content.cover_path,
                 tags=content.tags or [],
-                username=username
+                username=username,
+                context=context
             )
             
         except Exception as e:
@@ -394,7 +396,8 @@ class XiaohongshuService:
         video_path: str,
         cover_path: Optional[str],
         tags: List[str],
-        username: Optional[str] = None
+        username: Optional[str] = None,
+        context: Optional[Context] = None
     ) -> PublishResponse:
         """
         执行视频内容发布
@@ -428,7 +431,7 @@ class XiaohongshuService:
         )
         
         # 执行视频发布
-        return await publish_action.publish_video(video_content)
+        return await publish_action.publish_video(video_content, context=context)
     
     async def post_comment_to_feed(
         self,
