@@ -9,6 +9,11 @@ from pathlib import Path
 from typing import List, Optional, Dict, Any, Union
 from loguru import logger
 
+try:
+    from fastmcp import Context
+except ImportError:
+    Context = None
+
 from .types import (
     PublishImageContent,
     PublishVideoContent,
@@ -47,7 +52,8 @@ class XiaohongshuService:
     async def publish_content(
         self,
         content: PublishImageContent,
-        username: Optional[str] = None
+        username: Optional[str] = None,
+        context: Optional[Context] = None
     ) -> PublishResponse:
         """
         发布图文内容
@@ -109,7 +115,8 @@ class XiaohongshuService:
                 content_text=content.content,
                 images=processed_images,
                 tags=content.tags or [],
-                username=username
+                username=username,
+                context=context
             )
             
         except Exception as e:
@@ -344,7 +351,8 @@ class XiaohongshuService:
         content_text: str,
         images: List[str],
         tags: List[str],
-        username: Optional[str] = None
+        username: Optional[str] = None,
+        context: Optional[Context] = None
     ) -> PublishResponse:
         """
         执行图文内容发布
@@ -378,7 +386,7 @@ class XiaohongshuService:
         )
         
         # 执行发布
-        return await publish_action.publish(publish_content)
+        return await publish_action.publish(publish_content, context=context)
     
     async def _publish_video(
         self,

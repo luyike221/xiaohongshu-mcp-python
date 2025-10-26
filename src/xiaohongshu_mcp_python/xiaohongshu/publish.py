@@ -10,6 +10,11 @@ from typing import List, Optional
 from playwright.async_api import Page, TimeoutError as PlaywrightTimeoutError
 from loguru import logger
 
+try:
+    from fastmcp import Context
+except ImportError:
+    Context = None
+
 from ..types import PublishImageContent, PublishVideoContent, PublishResponse
 from ..config import XiaohongshuUrls, XiaohongshuSelectors, BrowserConfig, PublishConfig
 
@@ -26,7 +31,7 @@ class PublishAction:
         """
         self.page = page
     
-    async def publish(self, content: PublishImageContent) -> PublishResponse:
+    async def publish(self, content: PublishImageContent, context: Optional[Context] = None) -> PublishResponse:
         """
         发布图文内容
         
@@ -40,22 +45,44 @@ class PublishAction:
             logger.info(f"开始发布图文内容: {content.title}")
             
             # 导航到发布页面
-            await self._navigate_to_publish_page()
+            if context:
+                await context.report_progress(progress=10, total=100)
+            await self._navigate_to_publish_page(context)
+
+            
             
             # 选择图文发布标签
+            if context:
+                await context.report_progress(progress=20, total=100)
             await self._select_image_publish_tab()
             
             # 上传图片
+            if context:
+                await context.report_progress(progress=30, total=100)
             await self._upload_images(content.images)
             
+            # 等待图片上传完成
+            if context:
+                await context.report_progress(progress=50, total=100)
+            await self._wait_for_upload_complete(len(content.images))
+            
             # 填写内容
+            if context:
+                await context.report_progress(progress=70, total=100)
             await self._fill_content(content.title, content.content, content.tags or [])
             
             # 点击发布按钮
+            if context:
+                await context.report_progress(progress=90, total=100)
             await self._click_publish_button()
             
             # 等待发布完成
+            if context:
+                await context.report_progress(progress=95, total=100)
             note_id = await self._wait_for_publish_complete()
+            
+            if context:
+                await context.report_progress(progress=100, total=100)
             
             logger.info(f"图文发布成功: {note_id}")
             return PublishResponse(
@@ -118,13 +145,31 @@ class PublishAction:
                 error="PUBLISH_FAILED"
             )
     
-    async def _navigate_to_publish_page(self):
+    async def _navigate_to_publish_page(self, context: Optional[Context] = None):
         """导航到发布页面"""
         logger.info("导航到发布页面")
-        await self.page.goto(XiaohongshuUrls.PUBLISH_URL, wait_until="networkidle")
+        
+        # 发送进度报告：开始导航
+        if context:
+            await context.report_progress(progress=5, total=100)
+        
+        # 使用更长的超时时间进行页面导航
+        await self.page.goto(
+            XiaohongshuUrls.PUBLISH_URL, 
+            wait_until="networkidle",
+            timeout=BrowserConfig.PAGE_LOAD_TIMEOUT  # 60秒超时
+        )
+        
+        # 发送进度报告：页面加载中
+        if context:
+            await context.report_progress(progress=8, total=100)
         
         # 等待页面加载完成
-        await self.page.wait_for_load_state("networkidle")
+        await self.page.wait_for_load_state("networkidle", timeout=BrowserConfig.PAGE_LOAD_TIMEOUT)
+        
+        # 发送进度报告：移除弹窗
+        if context:
+            await context.report_progress(progress=10, total=100)
         
         # 移除可能的弹窗
         await self._remove_popups()
@@ -157,7 +202,7 @@ class PublishAction:
         try:
             # 等待并点击视频发布标签
             video_tab = await self.page.wait_for_selector(
-                "text=上传视频",
+                XiaohongshuSelectors.VIDEO_PUBLISH_TAB,
                 timeout=BrowserConfig.ELEMENT_TIMEOUT
             )
             
@@ -179,14 +224,14 @@ class PublishAction:
             image_paths: 图片路径列表
         """
         if not image_paths:
-            raise Exception("图片路径列表为空")
+            raise Exception("图片路径列表不能为空")
         
-        logger.info(f"开始上传 {len(image_paths)} 张图片")
-        
-        # 验证图片文件存在
+        # 验证文件存在性
         for path in image_paths:
             if not os.path.exists(path):
                 raise Exception(f"图片文件不存在: {path}")
+        
+        logger.info(f"开始上传 {len(image_paths)} 张图片")
         
         try:
             # 等待上传输入框
@@ -374,7 +419,7 @@ class PublishAction:
             )
             
             if title_input:
-                await title_input.clear()
+                # 使用 fill() 方法，它会自动清空输入框然后填入新内容
                 await title_input.fill(title)
                 logger.info("标题输入完成")
             else:
@@ -399,7 +444,7 @@ class PublishAction:
             )
             
             if content_textarea:
-                await content_textarea.clear()
+                # 使用 fill() 方法，它会自动清空输入框然后填入新内容
                 await content_textarea.fill(content)
                 logger.info("正文内容输入完成")
             else:
@@ -465,8 +510,13 @@ class PublishAction:
             )
             
             if publish_button:
-                await publish_button.click()
-                logger.info("已点击发布按钮")
+                # 多次点击发布按钮，增加成功率
+                for i in range(3):
+                    await publish_button.click()
+                    logger.info(f"第{i+1}次点击发布按钮")
+                    await asyncio.sleep(1)  # 每次点击后等待1秒
+                
+                logger.info("已完成发布按钮点击")
             else:
                 raise Exception("找不到发布按钮")
                 
@@ -543,10 +593,19 @@ class PublishAction:
     async def _remove_popups(self):
         """移除弹窗"""
         try:
+            # 等待页面加载完毕 - 检查上传容器是否存在或等待最多3秒
+            await self._wait_for_page_loaded()
+            
             # 查找并关闭可能的弹窗
             popup_close = await self.page.query_selector(XiaohongshuSelectors.POPUP_CLOSE)
             if popup_close:
                 await popup_close.click()
+                await asyncio.sleep(0.5)
+            
+            # 查找并点击短笔记提示按钮
+            short_note_tooltip_button = await self.page.query_selector('//button[contains(@class, "short-note-rooltip-button")]')
+            if short_note_tooltip_button:
+                await short_note_tooltip_button.click()
                 await asyncio.sleep(0.5)
             
             # 点击空白区域关闭遮罩
@@ -557,6 +616,22 @@ class PublishAction:
                 
         except Exception as e:
             logger.debug(f"移除弹窗时出错: {e}")
+    
+    async def _wait_for_page_loaded(self):
+        """等待页面加载完毕"""
+        try:
+            # 等待上传容器出现或超时3秒
+            await self.page.wait_for_selector(
+                '//div[contains(@class, "upload-container")]',
+                timeout=3000,
+                state="visible"
+            )
+            logger.debug("页面加载完毕 - 上传容器已出现")
+        except PlaywrightTimeoutError:
+            # 超时也继续执行，可能页面已经加载完毕但没有上传容器
+            logger.debug("等待上传容器超时，继续执行")
+        except Exception as e:
+            logger.debug(f"等待页面加载时出错: {e}")
     
     async def _click_empty_position(self):
         """点击页面空白位置"""

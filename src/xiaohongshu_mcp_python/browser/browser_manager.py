@@ -19,7 +19,7 @@ class BrowserManager:
     
     def __init__(
         self,
-        headless: bool = True,
+        headless: bool = False,
         browser_type: str = "chromium",
         user_data_dir: Optional[Path] = None,
         cookie_storage: Optional[CookieStorage] = None

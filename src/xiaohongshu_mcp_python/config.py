@@ -21,7 +21,7 @@ class XiaohongshuUrls:
     
     # 创作者中心
     CREATOR_URL = "https://creator.xiaohongshu.com"
-    PUBLISH_URL = "https://creator.xiaohongshu.com/publish/publish"
+    PUBLISH_URL = "https://creator.xiaohongshu.com/publish/publish?source=official"
     
     # 搜索
     SEARCH_URL = "https://www.xiaohongshu.com/search_result"
@@ -47,17 +47,18 @@ class XiaohongshuSelectors:
     LOGIN_SUCCESS_INDICATOR = ".user-info"
     
     # 发布页面
-    PUBLISH_TAB = "text=上传图文"
-    UPLOAD_INPUT = "input[type='file'][accept*='image']"
+    PUBLISH_TAB = '//div[3][normalize-space(.)="上传图文"][contains(@class, "creator-tab")]'
+    VIDEO_PUBLISH_TAB = "text=上传视频"
+    UPLOAD_INPUT = ".upload-input"
     UPLOADED_IMAGE = ".img-preview-area .pr"
     
     # 内容输入
     TITLE_INPUT = "input[placeholder*='填写标题']"
-    CONTENT_TEXTAREA = "div[data-placeholder*='添加正文']"
+    CONTENT_TEXTAREA = '//div[contains(@class, "tiptap")][contains(@class, "ProseMirror")]'
     TAG_INPUT = "input[placeholder*='添加话题']"
     
     # 发布按钮
-    PUBLISH_BUTTON = "button:has-text('发布')"
+    PUBLISH_BUTTON = '//button[contains(@class, "d-button")][contains(@class, "d-button-large")][contains(@class, "publishBtn")]'
     
     # 搜索相关
     SEARCH_INPUT = "input[placeholder*='搜索']"
@@ -89,7 +90,7 @@ class BrowserConfig:
     DEFAULT_TIMEOUT = 30000
     
     # 页面加载超时时间
-    PAGE_LOAD_TIMEOUT = 60000
+    PAGE_LOAD_TIMEOUT = 120000
     
     # 元素等待超时时间
     ELEMENT_TIMEOUT = 10000

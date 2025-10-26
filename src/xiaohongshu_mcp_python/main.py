@@ -275,7 +275,7 @@ async def xiaohongshu_publish_content(
             )
             
             # 执行发布
-            result = await service.publish_content(publish_request, current_user)
+            result = await service.publish_content(publish_request, current_user, context)
             
             # 发送进度通知：发布完成
             if context:

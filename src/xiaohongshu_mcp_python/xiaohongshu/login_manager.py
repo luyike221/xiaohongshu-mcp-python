@@ -321,7 +321,7 @@ class LoginManager:
                 logger.error(f"等待登录过程中出错: {e}")
                 await asyncio.sleep(check_interval)
     
-    async def login(self, headless: bool = True) -> LoginResult:
+    async def login(self, headless: bool = False) -> LoginResult:
         """
         执行完整的登录流程
         

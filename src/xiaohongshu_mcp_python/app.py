@@ -19,7 +19,7 @@ from .main import main as mcp_main
 class AppServer:
     """应用服务器，整合 MCP 和 HTTP 服务"""
     
-    def __init__(self, port: int = 18060, headless: bool = True):
+    def __init__(self, port: int = 18060, headless: bool = False):
         self.port = port
         self.headless = headless
         self.http_server = None
@@ -120,8 +120,8 @@ def main():
     parser.add_argument(
         "--headless",
         action="store_true",
-        default=True,
-        help="是否使用无头浏览器模式 (默认: True)"
+        default=False,
+        help="使用无头浏览器模式 (默认: False，显示浏览器界面)"
     )
     parser.add_argument(
         "--debug",

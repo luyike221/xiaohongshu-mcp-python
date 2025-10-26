@@ -11,7 +11,7 @@ class TestBrowserManager:
     def test_init_default(self):
         """测试默认初始化"""
         manager = BrowserManager()
-        assert manager.headless is True
+        assert manager.headless is False
         assert manager.browser is None
         assert manager.context is None
         assert manager.page is None
