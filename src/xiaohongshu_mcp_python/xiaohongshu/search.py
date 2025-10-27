@@ -1,18 +1,16 @@
 """
-小红书搜索功能
-实现内容搜索和结果解析
+小红书搜索功能实现
+参考 Go 版本的设计，提供简洁高效的搜索功能
 """
 
 import asyncio
 import json
-import re
 from typing import List, Optional, Dict, Any
-from urllib.parse import quote
-from playwright.async_api import Page, TimeoutError as PlaywrightTimeoutError
+from urllib.parse import urlencode
 from loguru import logger
+from playwright.async_api import Page, TimeoutError as PlaywrightTimeoutError
 
-from ..types import SearchResult, Feed, FeedData
-from ..config import XiaohongshuUrls, XiaohongshuSelectors, BrowserConfig
+from ..types import Feed, SearchResult
 
 
 class SearchAction:
@@ -26,413 +24,228 @@ class SearchAction:
             page: Playwright页面对象
         """
         self.page = page
-    
+        
     async def search(self, keyword: str, page_num: int = 1) -> SearchResult:
         """
-        搜索内容
+        搜索内容（参考Go版本的简洁实现）
         
         Args:
             keyword: 搜索关键词
-            page_num: 页码
+            page_num: 页码（暂时保留，但主要逻辑参考Go版本）
             
         Returns:
             搜索结果
         """
         try:
-            logger.info(f"开始搜索: {keyword}, 页码: {page_num}")
-            
-            # 构建搜索URL
-            search_url = self._make_search_url(keyword, page_num)
+            # 构建搜索URL（参考Go版本）
+            search_url = self._make_search_url(keyword)
+            logger.info(f"搜索URL: {search_url}")
             
             # 导航到搜索页面
             await self.page.goto(search_url, wait_until="networkidle")
             
-            # 等待页面加载完成
+            # 等待页面稳定（参考Go版本）
             await self.page.wait_for_load_state("networkidle")
             
-            # 解析搜索结果
-            result = await self._parse_search_results()
+            # 等待 __INITIAL_STATE__ 可用（参考Go版本的逻辑）
+            await self.page.wait_for_function("() => window.__INITIAL_STATE__ !== undefined")
             
-            logger.info(f"搜索完成，找到 {len(result.items)} 个结果")
-            return result
+            # 获取 __INITIAL_STATE__ 数据（参考Go版本，避免循环引用）
+            initial_state_js = """
+            () => {
+                if (window.__INITIAL_STATE__) {
+                    // 安全地序列化，避免循环引用
+                    try {
+                        return JSON.stringify(window.__INITIAL_STATE__, (key, value) => {
+                            // 跳过可能导致循环引用的属性
+                            if (key === 'dep' || key === 'computed' || typeof value === 'function') {
+                                return undefined;
+                            }
+                            return value;
+                        });
+                    } catch (e) {
+                        // 如果还是有问题，只提取我们需要的部分
+                        const state = window.__INITIAL_STATE__;
+                        if (state && state.Main && state.Main.feedData) {
+                            return JSON.stringify({
+                                Main: {
+                                    feedData: state.Main.feedData
+                                }
+                            });
+                        }
+                        return "{}";
+                    }
+                }
+                return "";
+            }
+            """
             
+            result = await self.page.evaluate(initial_state_js)
+            
+            if not result:
+                logger.warning("未找到 __INITIAL_STATE__ 数据")
+                return SearchResult(items=[], has_more=False, total=0)
+            
+            # 解析搜索结果（参考Go版本的数据结构）
+            return await self._parse_search_results_from_state(result)
+            
+        except PlaywrightTimeoutError as e:
+            logger.error(f"搜索超时: {e}")
+            return SearchResult(items=[], has_more=False, total=0)
         except Exception as e:
             logger.error(f"搜索失败: {e}")
-            return SearchResult(
-                items=[],
-                has_more=False,
-                total=0
-            )
+            return SearchResult(items=[], has_more=False, total=0)
     
-    def _make_search_url(self, keyword: str, page_num: int = 1) -> str:
+    def _make_search_url(self, keyword: str) -> str:
         """
-        构建搜索URL
+        构建搜索URL（参考Go版本的实现）
         
         Args:
             keyword: 搜索关键词
-            page_num: 页码
             
         Returns:
             搜索URL
         """
-        encoded_keyword = quote(keyword)
-        return f"{XiaohongshuUrls.SEARCH_URL}?keyword={encoded_keyword}&page={page_num}"
+        params = {
+            "keyword": keyword,
+            "source": "web_explore_feed"
+        }
+        query_string = urlencode(params)
+        return f"https://www.xiaohongshu.com/search_result?{query_string}"
     
-    async def _parse_search_results(self) -> SearchResult:
+    async def _parse_search_results_from_state(self, state_json: str) -> SearchResult:
         """
-        解析搜索结果
-        
-        Returns:
-            搜索结果
-        """
-        try:
-            # 方法1: 尝试从 __INITIAL_STATE__ 解析
-            initial_state_result = await self._parse_from_initial_state()
-            if initial_state_result and initial_state_result.items:
-                return initial_state_result
-            
-            # 方法2: 从DOM元素解析
-            dom_result = await self._parse_from_dom()
-            return dom_result
-            
-        except Exception as e:
-            logger.error(f"解析搜索结果失败: {e}")
-            return SearchResult(
-                items=[],
-                has_more=False,
-                total=0
-            )
-    
-    async def _parse_from_initial_state(self) -> Optional[SearchResult]:
-        """
-        从 __INITIAL_STATE__ 解析搜索结果
-        
-        Returns:
-            搜索结果
-        """
-        try:
-            # 获取页面中的 __INITIAL_STATE__ 数据
-            initial_state_script = await self.page.query_selector(
-                "script:has-text('__INITIAL_STATE__')"
-            )
-            
-            if not initial_state_script:
-                logger.debug("未找到 __INITIAL_STATE__ 脚本")
-                return None
-            
-            script_content = await initial_state_script.text_content()
-            if not script_content:
-                return None
-            
-            # 提取JSON数据
-            match = re.search(r'__INITIAL_STATE__\s*=\s*({.+?});', script_content)
-            if not match:
-                logger.debug("未找到 __INITIAL_STATE__ 数据")
-                return None
-            
-            json_str = match.group(1)
-            data = json.loads(json_str)
-            
-            # 解析搜索结果数据
-            return self._extract_search_data_from_state(data)
-            
-        except Exception as e:
-            logger.debug(f"从 __INITIAL_STATE__ 解析失败: {e}")
-            return None
-    
-    def _extract_search_data_from_state(self, data: Dict[str, Any]) -> Optional[SearchResult]:
-        """
-        从状态数据中提取搜索结果
+        从 __INITIAL_STATE__ 解析搜索结果（参考Go版本的数据结构）
         
         Args:
-            data: 状态数据
+            state_json: __INITIAL_STATE__ 的JSON字符串
             
         Returns:
-            搜索结果
+            解析后的搜索结果
         """
         try:
-            # 根据小红书的数据结构提取搜索结果
-            # 这里需要根据实际的数据结构调整
-            search_data = data.get("search", {})
-            if not search_data:
-                return None
+            state_data = json.loads(state_json)
             
-            items_data = search_data.get("items", [])
-            if not items_data:
-                return None
+            # 参考Go版本的数据结构：searchResult.Search.Feeds.Value
+            search_data = state_data.get("search", {})
+            feeds_data = search_data.get("feeds", {})
+            feeds_value = feeds_data.get("_value", [])
+            
+            logger.info(f"从 __INITIAL_STATE__ 解析到 {len(feeds_value)} 个搜索结果")
             
             # 转换为Feed对象
             feeds = []
-            for item_data in items_data:
+            for item in feeds_value:
                 try:
-                    feed = self._convert_item_to_feed(item_data)
+                    feed = self._convert_item_to_feed(item)
                     if feed:
                         feeds.append(feed)
                 except Exception as e:
-                    logger.debug(f"转换搜索项失败: {e}")
+                    logger.warning(f"转换Feed项失败: {e}")
                     continue
-            
-            # 获取分页信息
-            has_more = search_data.get("has_more", False)
-            total = search_data.get("total", len(feeds))
-            cursor = search_data.get("cursor")
             
             return SearchResult(
                 items=feeds,
-                has_more=has_more,
-                total=total,
-                cursor=cursor
+                has_more=len(feeds_value) >= 20,  # 假设每页20个结果
+                total=len(feeds)
             )
             
+        except json.JSONDecodeError as e:
+            logger.error(f"解析 __INITIAL_STATE__ JSON失败: {e}")
+            return SearchResult(items=[], has_more=False, total=0)
         except Exception as e:
-            logger.debug(f"提取搜索数据失败: {e}")
-            return None
+            logger.error(f"解析搜索结果失败: {e}")
+            return SearchResult(items=[], has_more=False, total=0)
     
-    def _convert_item_to_feed(self, item_data: Dict[str, Any]) -> Optional[Feed]:
+    def _convert_item_to_feed(self, item: Dict[str, Any]) -> Optional[Feed]:
         """
-        将搜索项数据转换为Feed对象
+        将搜索结果项转换为Feed对象（参考Go版本的数据结构）
         
         Args:
-            item_data: 搜索项数据
+            item: 搜索结果项
             
         Returns:
-            Feed对象
+            Feed对象或None
         """
         try:
-            # 这里需要根据实际的数据结构进行转换
-            # 以下是示例结构，需要根据实际情况调整
+            from ..types import (
+                User, InteractInfo, Cover, ImageInfo, 
+                NoteCard, VideoCapability, Video
+            )
             
-            note_card_data = item_data.get("note_card", {})
-            if not note_card_data:
-                return None
-            
-            from ..types import Feed, NoteCard, User, InteractInfo, Cover, ImageInfo
-            
-            # 用户信息
+            # 获取基本信息
+            note_card_data = item.get("noteCard", {})
             user_data = note_card_data.get("user", {})
+            interact_data = note_card_data.get("interactInfo", {})
+            cover_data = note_card_data.get("cover", {})
+            video_data = note_card_data.get("video")
+            
+            # 构建User对象（修正字段映射）
             user = User(
-                user_id=user_data.get("user_id", ""),
-                nickname=user_data.get("nickname", ""),
+                user_id=user_data.get("userId", ""),
+                nickname=user_data.get("nickname", user_data.get("nickName", "")),
                 avatar=user_data.get("avatar", ""),
                 desc=user_data.get("desc", ""),
                 gender=user_data.get("gender"),
-                ip_location=user_data.get("ip_location", "")
+                ip_location=user_data.get("ipLocation")
             )
             
-            # 互动信息
-            interact_data = note_card_data.get("interact_info", {})
+            # 构建InteractInfo对象（修正字段映射）
             interact_info = InteractInfo(
                 liked=interact_data.get("liked", False),
-                liked_count=str(interact_data.get("liked_count", 0)),
+                liked_count=str(interact_data.get("likedCount", "0")),
                 collected=interact_data.get("collected", False),
-                collected_count=str(interact_data.get("collected_count", 0)),
-                comment_count=str(interact_data.get("comment_count", 0)),
-                share_count=str(interact_data.get("share_count", 0))
+                collected_count=str(interact_data.get("collectedCount", "0")),
+                comment_count=str(interact_data.get("commentCount", "0")),
+                share_count=str(interact_data.get("sharedCount", "0"))
             )
             
-            # 封面信息
-            cover_data = note_card_data.get("cover", {})
+            # 构建Cover对象（修正字段映射）
             cover = Cover(
                 url=cover_data.get("url", ""),
                 width=cover_data.get("width", 0),
                 height=cover_data.get("height", 0),
-                file_id=cover_data.get("file_id")
+                file_id=cover_data.get("fileId", "")
             )
             
-            # 图片列表
-            images_list = []
-            images_data = note_card_data.get("images_list", [])
-            for img_data in images_data:
-                image_info = ImageInfo(
-                    url=img_data.get("url", ""),
-                    width=img_data.get("width", 0),
-                    height=img_data.get("height", 0),
-                    file_id=img_data.get("file_id")
+            # 构建Video对象（如果存在）
+            video = None
+            if video_data:
+                video = Video(
+                    media=video_data.get("media", {}),
+                    video_id=video_data.get("videoId", ""),
+                    duration=video_data.get("duration", 0),
+                    width=video_data.get("width", 0),
+                    height=video_data.get("height", 0),
+                    master_url=video_data.get("masterUrl", ""),
+                    backup_urls=video_data.get("backupUrls", []),
+                    stream=video_data.get("stream", {}),
+                    h264=video_data.get("h264", []),
+                    h265=video_data.get("h265", []),
+                    av1=video_data.get("av1", [])
                 )
-                images_list.append(image_info)
             
-            # 笔记卡片
+            # 构建NoteCard对象（修正字段映射）
             note_card = NoteCard(
                 type=note_card_data.get("type", ""),
-                display_title=note_card_data.get("display_title", ""),
+                display_title=note_card_data.get("displayTitle", ""),
                 user=user,
                 interact_info=interact_info,
                 cover=cover,
-                images_list=images_list if images_list else None
+                images_list=None,  # 简化处理
+                video=video
             )
             
-            # Feed对象
+            # 构建Feed对象（修正字段映射）
             feed = Feed(
-                id=item_data.get("id", ""),
-                model_type=item_data.get("model_type", ""),
+                id=item.get("id", ""),
+                model_type=item.get("modelType", ""),
                 note_card=note_card,
-                track_id=item_data.get("track_id")
+                track_id=item.get("trackId")
             )
             
             return feed
             
         except Exception as e:
-            logger.debug(f"转换搜索项数据失败: {e}")
+            logger.error(f"转换Feed对象失败: {e}")
             return None
-    
-    async def _parse_from_dom(self) -> SearchResult:
-        """
-        从DOM元素解析搜索结果
-        
-        Returns:
-            搜索结果
-        """
-        try:
-            logger.debug("从DOM解析搜索结果")
-            
-            # 等待搜索结果加载
-            await self.page.wait_for_selector(
-                XiaohongshuSelectors.SEARCH_RESULT_ITEM,
-                timeout=BrowserConfig.ELEMENT_TIMEOUT
-            )
-            
-            # 获取所有搜索结果项
-            result_items = await self.page.query_selector_all(
-                XiaohongshuSelectors.SEARCH_RESULT_ITEM
-            )
-            
-            feeds = []
-            for item in result_items:
-                try:
-                    feed = await self._extract_feed_from_element(item)
-                    if feed:
-                        feeds.append(feed)
-                except Exception as e:
-                    logger.debug(f"提取搜索项失败: {e}")
-                    continue
-            
-            # 检查是否有更多结果
-            has_more = await self._check_has_more()
-            
-            return SearchResult(
-                items=feeds,
-                has_more=has_more,
-                total=len(feeds)
-            )
-            
-        except PlaywrightTimeoutError:
-            logger.warning("等待搜索结果超时")
-            return SearchResult(
-                items=[],
-                has_more=False,
-                total=0
-            )
-        except Exception as e:
-            logger.error(f"从DOM解析搜索结果失败: {e}")
-            return SearchResult(
-                items=[],
-                has_more=False,
-                total=0
-            )
-    
-    async def _extract_feed_from_element(self, element) -> Optional[Feed]:
-        """
-        从DOM元素提取Feed信息
-        
-        Args:
-            element: DOM元素
-            
-        Returns:
-            Feed对象
-        """
-        try:
-            from ..types import Feed, NoteCard, User, InteractInfo, Cover
-            
-            # 提取标题
-            title_element = await element.query_selector(XiaohongshuSelectors.FEED_TITLE)
-            title = await title_element.text_content() if title_element else ""
-            
-            # 提取作者
-            author_element = await element.query_selector(XiaohongshuSelectors.FEED_AUTHOR)
-            author = await author_element.text_content() if author_element else ""
-            
-            # 提取封面
-            cover_element = await element.query_selector(XiaohongshuSelectors.FEED_COVER)
-            cover_url = await cover_element.get_attribute("src") if cover_element else ""
-            
-            # 提取链接（用作ID）
-            link_element = await element.query_selector("a")
-            href = await link_element.get_attribute("href") if link_element else ""
-            note_id = self._extract_note_id_from_url(href) if href else ""
-            
-            # 构建基本的Feed对象
-            user = User(
-                user_id="",
-                nickname=author,
-                avatar="",
-                desc="",
-                ip_location=""
-            )
-            
-            interact_info = InteractInfo()
-            
-            cover = Cover(
-                url=cover_url,
-                width=0,
-                height=0
-            )
-            
-            note_card = NoteCard(
-                type="normal",
-                display_title=title,
-                user=user,
-                interact_info=interact_info,
-                cover=cover
-            )
-            
-            feed = Feed(
-                id=note_id,
-                model_type="note",
-                note_card=note_card
-            )
-            
-            return feed
-            
-        except Exception as e:
-            logger.debug(f"从元素提取Feed失败: {e}")
-            return None
-    
-    def _extract_note_id_from_url(self, url: str) -> str:
-        """
-        从URL中提取笔记ID
-        
-        Args:
-            url: URL
-            
-        Returns:
-            笔记ID
-        """
-        try:
-            if "/item/" in url:
-                return url.split("/item/")[-1].split("?")[0]
-            return ""
-        except Exception:
-            return ""
-    
-    async def _check_has_more(self) -> bool:
-        """
-        检查是否有更多结果
-        
-        Returns:
-            是否有更多结果
-        """
-        try:
-            # 检查是否有"加载更多"按钮或分页
-            load_more = await self.page.query_selector("text=加载更多")
-            if load_more:
-                return True
-            
-            # 检查分页
-            next_page = await self.page.query_selector(".pagination .next")
-            if next_page:
-                return True
-            
-            return False
-            
-        except Exception:
-            return False
