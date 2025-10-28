@@ -10,7 +10,7 @@ from typing import List, Optional, Dict, Any
 from playwright.async_api import Page, TimeoutError as PlaywrightTimeoutError
 from loguru import logger
 
-from ..types import FeedsListResponse, FeedData, Feed
+from ..types import FeedsListResponse, FeedData, Feed, FeedDetailResponse, FeedDetail, CommentList, FeedDetailData
 from ..config import XiaohongshuUrls, XiaohongshuSelectors, BrowserConfig
 
 
@@ -91,6 +91,295 @@ class FeedsAction:
                     has_more=False
                 )
             )
+    
+    async def get_feed_detail(self, note_id: str, xsec_token: Optional[str] = None) -> FeedDetailResponse:
+        """
+        获取笔记详情
+        
+        Args:
+            note_id: 笔记ID
+            xsec_token: xsec_token参数（可选）
+            
+        Returns:
+            笔记详情响应
+        """
+        try:
+            logger.info(f"开始获取笔记详情, note_id: {note_id}")
+            
+            # 构建详情页URL
+            url = self._make_feed_detail_url(note_id, xsec_token)
+            
+            # 添加随机延迟，模拟人类行为
+            await asyncio.sleep(1 + (hash(note_id) % 3))
+            
+            # 导航到详情页，使用更自然的等待策略
+            await self.page.goto(url, wait_until="domcontentloaded", timeout=60000)
+            
+            # 等待页面稳定，模拟人类浏览行为
+            await asyncio.sleep(2)
+            
+            # 模拟滚动行为
+            await self.page.evaluate("window.scrollTo(0, 100)")
+            await asyncio.sleep(0.5)
+            await self.page.evaluate("window.scrollTo(0, 0)")
+            
+            # 等待网络空闲
+            await self.page.wait_for_load_state("networkidle", timeout=30000)
+            logger.info("页面加载完成")
+            
+            # 获取 window.__INITIAL_STATE__ 数据，使用更简单的方法避免复杂的循环引用处理
+            result = await self.page.evaluate("""
+                () => {
+                    if (window.__INITIAL_STATE__) {
+                        try {
+                            // 直接尝试序列化，如果失败则使用备用方案
+                            return JSON.stringify(window.__INITIAL_STATE__);
+                        } catch (e) {
+                            // 如果遇到循环引用，只提取我们需要的部分
+                            const state = window.__INITIAL_STATE__;
+                            const result = {};
+                            
+                            // 提取 note 相关数据
+                            if (state.note) {
+                                result.note = {};
+                                if (state.note.noteDetailMap) {
+                                    result.note.noteDetailMap = {};
+                                    // 遍历 noteDetailMap，只复制基本数据
+                                    for (const key in state.note.noteDetailMap) {
+                                        const noteDetail = state.note.noteDetailMap[key];
+                                        if (noteDetail && typeof noteDetail === 'object') {
+                                            result.note.noteDetailMap[key] = {
+                                                note: noteDetail.note || {},
+                                                comments: noteDetail.comments || {}
+                                            };
+                                        }
+                                    }
+                                }
+                            }
+                            
+                            return JSON.stringify(result);
+                        }
+                    }
+                    return "";
+                }
+            """)
+            logger.info(f"获取到的 __INITIAL_STATE__ 数据长度: {len(result)}")
+            
+            if not result:
+                logger.error("未找到 __INITIAL_STATE__ 数据")
+                return FeedDetailResponse(
+                    success=False,
+                    code=500,
+                    msg="未找到页面数据",
+                    data=None
+                )
+            
+            # 解析JSON数据
+            initial_state = json.loads(result)
+            
+            # 从 noteDetailMap 中获取对应 note_id 的数据
+            note_detail_map = initial_state.get("note", {}).get("noteDetailMap", {})
+            note_detail = note_detail_map.get(note_id)
+            
+            if not note_detail:
+                logger.error(f"在 noteDetailMap 中未找到笔记 {note_id}")
+                return FeedDetailResponse(
+                    success=False,
+                    code=404,
+                    msg=f"未找到笔记 {note_id}",
+                    data=None
+                )
+            
+            # 解析笔记详情数据
+            feed_detail = self._parse_feed_detail(note_detail.get("note", {}))
+            
+            # 解析评论数据（如果存在）
+            comments_data = note_detail.get("comments", {})
+            comment_list = None
+            if comments_data:
+                comment_list = self._parse_comment_list(comments_data)
+            
+            # 构建详情数据
+            detail_data = FeedDetailData(
+                note=feed_detail,
+                comments=comment_list
+            )
+            
+            logger.info(f"获取笔记详情成功: {note_id}")
+            return FeedDetailResponse(
+                success=True,
+                code=200,
+                msg="获取成功",
+                data=detail_data
+            )
+            
+        except Exception as e:
+            logger.error(f"获取笔记详情失败: {e}")
+            return FeedDetailResponse(
+                success=False,
+                code=500,
+                msg=f"获取笔记详情失败: {str(e)}",
+                data=None
+            )
+    
+    def _make_feed_detail_url(self, note_id: str, xsec_token: Optional[str] = None) -> str:
+        """
+        构建笔记详情页URL
+        
+        Args:
+            note_id: 笔记ID
+            xsec_token: xsec_token参数
+            
+        Returns:
+            详情页URL
+        """
+        base_url = f"https://www.xiaohongshu.com/explore/{note_id}"
+        if xsec_token:
+            base_url += f"?xsec_token={xsec_token}&xsec_source=pc_feed"
+        return base_url
+    
+    def _parse_feed_detail(self, note_data: Dict[str, Any]) -> FeedDetail:
+        """
+        解析笔记详情数据
+        
+        Args:
+            note_data: 原始笔记数据
+            
+        Returns:
+            解析后的笔记详情
+        """
+        from ..types import User, InteractInfo, DetailImageInfo
+        
+        # 解析用户信息
+        user_data = note_data.get("user", {})
+        user = User(
+            user_id=user_data.get("userId", ""),
+            nickname=user_data.get("nickname", ""),
+            avatar=user_data.get("avatar", ""),
+            desc=user_data.get("desc", ""),
+            gender=user_data.get("gender"),
+            ip_location=user_data.get("ipLocation", "")
+        )
+        
+        # 解析互动信息
+        interact_data = note_data.get("interactInfo", {})
+        interact_info = InteractInfo(
+            liked=interact_data.get("liked", False),
+            liked_count=str(interact_data.get("likedCount", 0)),
+            collected=interact_data.get("collected", False),
+            collected_count=str(interact_data.get("collectedCount", 0)),
+            comment_count=str(interact_data.get("commentCount", 0)),
+            share_count=str(interact_data.get("shareCount", 0))
+        )
+        
+        # 解析图片列表
+        image_list = []
+        images_data = note_data.get("imageList", [])
+        for img_data in images_data:
+            image_info = DetailImageInfo(
+                url=img_data.get("url", ""),
+                width=img_data.get("width", 0),
+                height=img_data.get("height", 0),
+                file_id=img_data.get("fileId"),
+                live_photo=img_data.get("livePhoto"),
+                format=img_data.get("format")
+            )
+            image_list.append(image_info)
+        
+        # 构建笔记详情对象
+        feed_detail = FeedDetail(
+            note_id=note_data.get("noteId", ""),
+            title=note_data.get("title", ""),
+            desc=note_data.get("desc", ""),
+            type=note_data.get("type", ""),
+            user=user,
+            interact_info=interact_info,
+            image_list=image_list if image_list else None,
+            video=note_data.get("video"),
+            tag_list=note_data.get("tagList"),
+            at_user_list=note_data.get("atUserList"),
+            collected_count=str(interact_data.get("collectedCount", 0)),
+            comment_count=str(interact_data.get("commentCount", 0)),
+            liked_count=str(interact_data.get("likedCount", 0)),
+            share_count=str(interact_data.get("shareCount", 0)),
+            time=note_data.get("time", 0),
+            last_update_time=note_data.get("lastUpdateTime", 0)
+        )
+        
+        return feed_detail
+    
+    def _parse_comment_list(self, comments_data: Dict[str, Any]) -> CommentList:
+        """
+        解析评论列表数据
+        
+        Args:
+            comments_data: 原始评论数据
+            
+        Returns:
+            解析后的评论列表
+        """
+        from ..types import Comment, User
+        
+        comments = []
+        comment_list_data = comments_data.get("list", [])
+        
+        for comment_data in comment_list_data:
+            # 解析评论用户信息
+            user_info = comment_data.get("userInfo", {})
+            user = User(
+                user_id=user_info.get("userId", ""),
+                nickname=user_info.get("nickname", ""),
+                avatar=user_info.get("avatar", ""),
+                desc=user_info.get("desc", ""),
+                gender=user_info.get("gender"),
+                ip_location=user_info.get("ipLocation", "")
+            )
+            
+            # 解析子评论
+            sub_comments = []
+            sub_comments_data = comment_data.get("subComments", [])
+            for sub_comment_data in sub_comments_data:
+                sub_user_info = sub_comment_data.get("userInfo", {})
+                sub_user = User(
+                    user_id=sub_user_info.get("userId", ""),
+                    nickname=sub_user_info.get("nickname", ""),
+                    avatar=sub_user_info.get("avatar", ""),
+                    desc=sub_user_info.get("desc", ""),
+                    gender=sub_user_info.get("gender"),
+                    ip_location=sub_user_info.get("ipLocation", "")
+                )
+                
+                sub_comment = Comment(
+                    id=sub_comment_data.get("id", ""),
+                    content=sub_comment_data.get("content", ""),
+                    create_time=sub_comment_data.get("createTime", 0),
+                    ip_location=sub_comment_data.get("ipLocation", ""),
+                    like_count=int(sub_comment_data.get("likeCount", 0)),
+                    user=sub_user,
+                    sub_comments=None,
+                    sub_comment_count=0
+                )
+                sub_comments.append(sub_comment)
+            
+            # 构建评论对象
+            comment = Comment(
+                id=comment_data.get("id", ""),
+                content=comment_data.get("content", ""),
+                create_time=comment_data.get("createTime", 0),
+                ip_location=comment_data.get("ipLocation", ""),
+                like_count=int(comment_data.get("likeCount", 0)),
+                user=user,
+                sub_comments=sub_comments if sub_comments else None,
+                sub_comment_count=int(comment_data.get("subCommentCount", 0))
+            )
+            comments.append(comment)
+        
+        return CommentList(
+            comments=comments,
+            cursor=comments_data.get("cursor", ""),
+            has_more=comments_data.get("hasMore", False),
+            time=comments_data.get("time", 0)
+        )
     
     async def _parse_from_initial_state(self) -> Optional[FeedsListResponse]:
         """

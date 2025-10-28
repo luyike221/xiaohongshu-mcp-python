@@ -173,7 +173,13 @@ class FeedDetailResponse(BaseModel):
     success: bool
     code: int
     msg: str
-    data: FeedDetail
+    data: Optional['FeedDetailData'] = None
+
+
+class FeedDetailData(BaseModel):
+    """动态详情数据"""
+    note: FeedDetail
+    comments: Optional['CommentList'] = None
 
 
 # ============ 评论数据结构 ============
@@ -282,3 +288,4 @@ class FeedsListResponse(BaseModel):
 
 # 更新前向引用
 Comment.model_rebuild()
+FeedDetailData.model_rebuild()

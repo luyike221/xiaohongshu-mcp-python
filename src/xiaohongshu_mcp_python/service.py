@@ -353,6 +353,7 @@ class XiaohongshuService:
     async def get_feed_detail(
         self,
         note_id: str,
+        xsec_token: Optional[str] = None,
         username: Optional[str] = None
     ) -> FeedDetailResponse:
         """
@@ -360,6 +361,7 @@ class XiaohongshuService:
         
         Args:
             note_id: 笔记ID
+            xsec_token: xsec_token参数（可选）
             username: 用户名
             
         Returns:
@@ -376,7 +378,7 @@ class XiaohongshuService:
                 )
             
             feeds_action = FeedsAction(page)
-            return await feeds_action.get_feed_detail(note_id)
+            return await feeds_action.get_feed_detail(note_id, xsec_token)
             
         except Exception as e:
             logger.error(f"获取动态详情失败: {e}")

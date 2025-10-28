@@ -630,6 +630,7 @@ async def xiaohongshu_get_user_profile(
 @mcp.tool
 async def xiaohongshu_get_feed_detail(
     feed_id: str,
+    xsec_token: str = "",
     username: Optional[str] = None
 ) -> dict:
     """
@@ -637,11 +638,20 @@ async def xiaohongshu_get_feed_detail(
     
     Args:
         feed_id: 笔记ID
+        xsec_token: xsec_token参数（可选，用于访问特定笔记）
         username: 用户名（可选，如果不提供则使用全局用户）
         
     Returns:
-        笔记详情信息
+        笔记详情信息，包含笔记内容、互动数据和评论
     """
+    # 参数验证
+    if not feed_id or not feed_id.strip():
+        return {
+            "success": False,
+            "error": "参数错误",
+            "message": "feed_id 不能为空"
+        }
+    
     try:
         from .service import XiaohongshuService
         from .browser import BrowserManager
@@ -666,7 +676,8 @@ async def xiaohongshu_get_feed_detail(
             service = XiaohongshuService(browser_manager)
             
             # 获取笔记详情
-            result = await service.get_feed_detail(feed_id, username=current_user)
+            xsec_token_param = xsec_token if xsec_token else None
+            result = await service.get_feed_detail(feed_id, xsec_token_param, username=current_user)
             
             return {
                 "success": True,

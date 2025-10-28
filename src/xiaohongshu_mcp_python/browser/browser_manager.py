@@ -120,13 +120,63 @@ class BrowserManager:
         
         self._browser = await browser_launcher.launch(**launch_options)
         
-        # 创建浏览器上下文
+        # 创建浏览器上下文 - 添加反检测配置
         context_options = {
             "viewport": {"width": BrowserConfig.VIEWPORT_WIDTH, "height": BrowserConfig.VIEWPORT_HEIGHT},
-            "user_agent": BrowserConfig.USER_AGENT
+            "user_agent": BrowserConfig.USER_AGENT,
+            "java_script_enabled": True,
+            "accept_downloads": True,
+            "ignore_https_errors": True,
+            "bypass_csp": True,
+            "extra_http_headers": {
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+                "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+                "Accept-Encoding": "gzip, deflate, br",
+                "Cache-Control": "no-cache",
+                "Pragma": "no-cache",
+                "Sec-Ch-Ua": '"Google Chrome";v="131", "Chromium";v="131", "Not_A Brand";v="24"',
+                "Sec-Ch-Ua-Mobile": "?0",
+                "Sec-Ch-Ua-Platform": '"Windows"',
+                "Sec-Fetch-Dest": "document",
+                "Sec-Fetch-Mode": "navigate",
+                "Sec-Fetch-Site": "none",
+                "Sec-Fetch-User": "?1",
+                "Upgrade-Insecure-Requests": "1"
+            }
         }
         
         self._context = await self._browser.new_context(**context_options)
+        
+        # 添加反检测脚本
+        await self._context.add_init_script("""
+            // 移除 webdriver 属性
+            Object.defineProperty(navigator, 'webdriver', {
+                get: () => undefined,
+            });
+            
+            // 伪装 Chrome 对象
+            window.chrome = {
+                runtime: {},
+                loadTimes: function() {},
+                csi: function() {},
+                app: {}
+            };
+            
+            // 伪装 plugins
+            Object.defineProperty(navigator, 'plugins', {
+                get: () => [1, 2, 3, 4, 5],
+            });
+            
+            // 伪装 languages
+            Object.defineProperty(navigator, 'languages', {
+                get: () => ['zh-CN', 'zh', 'en'],
+            });
+            
+            // 移除 automation 相关属性
+            delete window.cdc_adoQpoasnfa76pfcZLmcfl_Array;
+            delete window.cdc_adoQpoasnfa76pfcZLmcfl_Promise;
+            delete window.cdc_adoQpoasnfa76pfcZLmcfl_Symbol;
+        """)
         
         # 加载 cookies
         await self._load_cookies()

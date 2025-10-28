@@ -103,25 +103,61 @@ class BrowserConfig:
     VIEWPORT_WIDTH = 1920
     VIEWPORT_HEIGHT = 1080
     
-    # 浏览器启动参数
+    # 浏览器启动参数 - 优化反检测
     BROWSER_ARGS = [
-        "--no-sandbox",
-        "--disable-setuid-sandbox",
-        "--disable-dev-shm-usage",
-        "--disable-accelerated-2d-canvas",
+        "--disable-blink-features=AutomationControlled",
+        "--exclude-switches=enable-automation",
+        "--disable-extensions-except=/path/to/extension",
+        "--disable-plugins-discovery",
         "--no-first-run",
+        "--no-service-autorun",
+        "--password-store=basic",
+        "--use-mock-keychain",
+        "--disable-component-extensions-with-background-pages",
+        "--disable-default-apps",
+        "--mute-audio",
         "--no-zygote",
-        "--disable-gpu",
         "--disable-background-timer-throttling",
         "--disable-backgrounding-occluded-windows",
         "--disable-renderer-backgrounding",
+        "--disable-features=TranslateUI",
+        "--disable-ipc-flooding-protection",
+        "--disable-hang-monitor",
+        "--disable-client-side-phishing-detection",
+        "--disable-popup-blocking",
+        "--disable-prompt-on-repost",
+        "--disable-sync",
+        "--metrics-recording-only",
+        "--no-report-upload",
+        "--safebrowsing-disable-auto-update",
+        "--enable-automation=false",
+        "--disable-web-security",
+        "--allow-running-insecure-content",
+        "--disable-features=VizDisplayCompositor"
     ]
     
-    # 用户代理
+    # 用户代理 - 使用最新版本
     USER_AGENT = (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-        "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
     )
+    
+    # 额外的反检测配置
+    STEALTH_CONFIG = {
+        "webdriver": False,
+        "chrome_app": False,
+        "chrome_csi": False,
+        "chrome_load_times": False,
+        "chrome_runtime": False,
+        "iframe_content_window": False,
+        "media_codecs": False,
+        "navigator_languages": False,
+        "navigator_permissions": False,
+        "navigator_plugins": False,
+        "navigator_webdriver": False,
+        "webgl_vendor": False,
+        "window_outerdimensions": False,
+    }
 
 
 # ============ 发布配置 ============
