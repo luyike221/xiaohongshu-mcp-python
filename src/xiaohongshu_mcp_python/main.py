@@ -571,13 +571,15 @@ async def xiaohongshu_list_feeds(
 @mcp.tool
 async def xiaohongshu_get_user_profile(
     user_id: str,
+    xsec_token: str,
     username: Optional[str] = None
 ) -> dict:
     """
     获取小红书用户主页信息
     
     Args:
-        user_id: 用户ID
+        user_id: 小红书用户ID，从Feed列表获取
+        xsec_token: 访问令牌，从Feed列表的xsecToken字段获取
         username: 用户名（可选，如果不提供则使用全局用户）
         
     Returns:
@@ -607,7 +609,7 @@ async def xiaohongshu_get_user_profile(
             service = XiaohongshuService(browser_manager)
             
             # 获取用户资料
-            result = await service.get_user_profile(user_id, username=current_user)
+            result = await service.get_user_profile(user_id, xsec_token, username=current_user)
             
             return {
                 "success": True,
