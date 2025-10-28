@@ -1,6 +1,5 @@
 """
 小红书 MCP 服务的数据类型定义
-基于 Go 版本的设计，定义 Python 版本的数据结构
 """
 
 from typing import Optional, List, Dict, Any, Union
@@ -118,12 +117,14 @@ class Feed(BaseModel):
     model_type: str
     note_card: NoteCard
     track_id: Optional[str] = None
+    xsec_token: Optional[str] = None  # 添加xsec_token字段
+    index: Optional[int] = None  # 添加index字段
 
 
 class FeedData(BaseModel):
     """动态数据"""
-    items: List[Feed]
-    cursor_score: Optional[str] = None
+    feeds: List[Feed]
+    cursor: Optional[str] = None
     has_more: bool = False
 
 
@@ -273,11 +274,9 @@ class SearchResult(BaseModel):
 # ============ 服务响应数据结构 ============
 
 class FeedsListResponse(BaseModel):
-    """推荐列表响应"""
-    success: bool
-    feeds: List[Feed]
-    has_more: bool = False
-    cursor_score: Optional[str] = None
+    """Feeds列表响应"""
+    data: Optional[FeedData] = None
+    success: bool = True
     error: Optional[str] = None
 
 

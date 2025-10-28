@@ -215,26 +215,65 @@ class XiaohongshuService:
             if not page:
                 return FeedsListResponse(
                     success=False,
-                    feeds=[],
                     error="无法获取浏览器页面"
                 )
             
             feeds_action = FeedsAction(page)
-            result = await feeds_action.get_feeds_list(cursor_score)
+            result = await feeds_action.get_feeds(cursor_score)
             
-            return FeedsListResponse(
-                success=True,
-                feeds=result.feeds,
-                has_more=result.has_more,
-                cursor_score=result.cursor_score
-            )
+            return result
             
         except Exception as e:
             logger.error(f"获取推荐列表失败: {e}")
             return FeedsListResponse(
                 success=False,
-                feeds=[],
                 error=f"获取推荐列表失败: {str(e)}"
+            )
+
+    async def list_feeds(self, username: Optional[str] = None) -> FeedsListResponse:
+        """
+        获取首页推荐Feed列表（使用__INITIAL_STATE__方法）
+        
+        Args:
+            username: 用户名（可选）
+            
+        Returns:
+            Feed列表响应
+        """
+        try:
+            page = await self.browser_manager.get_page()
+            if not page:
+                return FeedsListResponse(
+                    success=False,
+                    error="无法获取浏览器页面"
+                )
+            
+            feeds_action = FeedsAction(page)
+            
+            # 导航到首页
+            await page.goto("https://www.xiaohongshu.com", wait_until="domcontentloaded")
+            
+            # 等待页面稳定
+            await asyncio.sleep(1)
+            
+            # 使用__INITIAL_STATE__方法获取推荐内容
+            result = await feeds_action._parse_from_initial_state()
+            
+            if result:
+                logger.info(f"成功获取到 {len(result.data.feeds) if result.data else 0} 个推荐内容")
+                return result
+            else:
+                logger.warning("未能从__INITIAL_STATE__获取推荐内容")
+                return FeedsListResponse(
+                    success=False,
+                    error="未能获取推荐内容"
+                )
+            
+        except Exception as e:
+            logger.error(f"获取首页推荐失败: {e}")
+            return FeedsListResponse(
+                success=False,
+                error=f"获取首页推荐失败: {str(e)}"
             )
     
     async def search_content(

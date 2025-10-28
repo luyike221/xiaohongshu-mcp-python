@@ -100,27 +100,47 @@ class FeedsAction:
             推荐内容响应
         """
         try:
-            # 获取页面中的 __INITIAL_STATE__ 数据
-            initial_state_script = await self.page.query_selector(
-                "script:has-text('__INITIAL_STATE__')"
-            )
+            # 等待 __INITIAL_STATE__ 可用（参考search.py的实现）
+            await self.page.wait_for_function("() => window.__INITIAL_STATE__ !== undefined", timeout=10000)
             
-            if not initial_state_script:
-                logger.debug("未找到 __INITIAL_STATE__ 脚本")
-                return None
+            # 获取 __INITIAL_STATE__ 数据（参考search.py的实现）
+            initial_state_js = """
+            () => {
+                if (window.__INITIAL_STATE__) {
+                    // 安全地序列化，避免循环引用
+                    try {
+                        return JSON.stringify(window.__INITIAL_STATE__, (key, value) => {
+                            // 跳过可能导致循环引用的属性
+                            if (key === 'dep' || key === 'computed' || typeof value === 'function') {
+                                return undefined;
+                            }
+                            return value;
+                        });
+                    } catch (e) {
+                        // 如果还是有问题，只提取我们需要的部分
+                        const state = window.__INITIAL_STATE__;
+                        if (state && state.feed && state.feed.feeds) {
+                            return JSON.stringify({
+                                feed: {
+                                    feeds: state.feed.feeds
+                                }
+                            });
+                        }
+                        return "{}";
+                    }
+                }
+                return "";
+            }
+            """
             
-            script_content = await initial_state_script.text_content()
-            if not script_content:
-                return None
+            result = await self.page.evaluate(initial_state_js)
             
-            # 提取JSON数据
-            match = re.search(r'__INITIAL_STATE__\s*=\s*({.+?});', script_content)
-            if not match:
+            if not result:
                 logger.debug("未找到 __INITIAL_STATE__ 数据")
                 return None
             
-            json_str = match.group(1)
-            data = json.loads(json_str)
+            # 解析JSON数据
+            data = json.loads(result)
             
             # 解析推荐内容数据
             return self._extract_feeds_data_from_state(data)
@@ -140,38 +160,38 @@ class FeedsAction:
             推荐内容响应
         """
         try:
-            # 根据小红书的数据结构提取推荐内容
-            # 这里需要根据实际的数据结构调整
-            home_data = data.get("home", {})
-            if not home_data:
-                # 尝试其他可能的路径
-                home_data = data.get("feed", {}) or data.get("recommend", {})
-            
-            if not home_data:
+            # 数据路径是 feed.feeds._value
+            feed_data = data.get("feed", {})
+            if not feed_data:
+                logger.debug("未找到feed数据")
                 return None
             
-            feeds_data = home_data.get("feeds", [])
-            if not feeds_data:
-                # 尝试其他可能的字段名
-                feeds_data = home_data.get("items", []) or home_data.get("list", [])
+            feeds_container = feed_data.get("feeds", {})
+            if not feeds_container:
+                logger.debug("未找到feeds容器")
+                return None
             
-            if not feeds_data:
+            feeds_list = feeds_container.get("_value", [])
+            if not feeds_list:
+                logger.debug("未找到feeds列表")
                 return None
             
             # 转换为Feed对象
             feeds = []
-            for feed_data in feeds_data:
+            for item in feeds_list:
                 try:
-                    feed = self._convert_data_to_feed(feed_data)
+                    feed = self._convert_data_to_feed(item)
                     if feed:
                         feeds.append(feed)
                 except Exception as e:
                     logger.debug(f"转换推荐项失败: {e}")
                     continue
             
-            # 获取分页信息
-            cursor = home_data.get("cursor", "")
-            has_more = home_data.get("has_more", False)
+            # 获取分页信息（如果有的话）
+            cursor = feeds_container.get("cursor", "")
+            has_more = feeds_container.get("hasMore", False)
+            
+            logger.info(f"成功解析到 {len(feeds)} 个推荐内容")
             
             return FeedsListResponse(
                 data=FeedData(
@@ -182,7 +202,7 @@ class FeedsAction:
             )
             
         except Exception as e:
-            logger.debug(f"提取推荐数据失败: {e}")
+            logger.error(f"提取推荐数据失败: {e}")
             return None
     
     def _convert_data_to_feed(self, feed_data: Dict[str, Any]) -> Optional[Feed]:
@@ -196,35 +216,41 @@ class FeedsAction:
             Feed对象
         """
         try:
-            # 这里需要根据实际的数据结构进行转换
-            # 以下是示例结构，需要根据实际情况调整
-            
-            note_card_data = feed_data.get("note_card", {})
-            if not note_card_data:
-                return None
-            
+            # 数据结构转换
             from ..types import Feed, NoteCard, User, InteractInfo, Cover, ImageInfo, Video
+            
+            # 获取基本信息
+            feed_id = feed_data.get("id", "")
+            model_type = feed_data.get("modelType", "")
+            xsec_token = feed_data.get("xsecToken", "")
+            index = feed_data.get("index", 0)
+            
+            # 获取笔记卡片数据
+            note_card_data = feed_data.get("noteCard", {})
+            if not note_card_data:
+                logger.debug(f"Feed {feed_id} 缺少noteCard数据")
+                return None
             
             # 用户信息
             user_data = note_card_data.get("user", {})
             user = User(
-                user_id=user_data.get("user_id", ""),
+                user_id=user_data.get("userId", ""),
                 nickname=user_data.get("nickname", ""),
                 avatar=user_data.get("avatar", ""),
                 desc=user_data.get("desc", ""),
                 gender=user_data.get("gender"),
-                ip_location=user_data.get("ip_location", "")
+                ip_location=user_data.get("ipLocation", "")
             )
             
             # 互动信息
-            interact_data = note_card_data.get("interact_info", {})
+            interact_data = note_card_data.get("interactInfo", {})
             interact_info = InteractInfo(
                 liked=interact_data.get("liked", False),
-                liked_count=str(interact_data.get("liked_count", 0)),
+                liked_count=str(interact_data.get("likedCount", 0)),
                 collected=interact_data.get("collected", False),
-                collected_count=str(interact_data.get("collected_count", 0)),
-                comment_count=str(interact_data.get("comment_count", 0)),
-                share_count=str(interact_data.get("share_count", 0))
+                collected_count=str(interact_data.get("collectedCount", 0)),
+                comment_count=str(interact_data.get("commentCount", 0)),
+                share_count=str(interact_data.get("shareCount", 0))
             )
             
             # 封面信息
@@ -233,67 +259,53 @@ class FeedsAction:
                 url=cover_data.get("url", ""),
                 width=cover_data.get("width", 0),
                 height=cover_data.get("height", 0),
-                file_id=cover_data.get("file_id")
+                file_id=cover_data.get("fileId")
             )
             
-            # 图片列表
-            images_list = []
-            images_data = note_card_data.get("images_list", [])
-            for img_data in images_data:
-                image_info = ImageInfo(
-                    url=img_data.get("url", ""),
-                    width=img_data.get("width", 0),
-                    height=img_data.get("height", 0),
-                    file_id=img_data.get("file_id")
-                )
-                images_list.append(image_info)
-            
-            # 视频信息
+            # 视频信息（如果存在）
             video = None
             video_data = note_card_data.get("video", {})
             if video_data:
-                from ..types import VideoCapability
-                
-                capability_data = video_data.get("capability", {})
-                capability = VideoCapability(
-                    adaptive_url=capability_data.get("adaptive_url", ""),
-                    definition=capability_data.get("definition", ""),
-                    duration=capability_data.get("duration", 0),
-                    size=capability_data.get("size", 0),
-                    url=capability_data.get("url", "")
-                )
-                
+                # 视频结构处理，简化处理
                 video = Video(
-                    url=video_data.get("url", ""),
+                    media=video_data.get("media", {}),
+                    video_id=video_data.get("videoId", ""),
+                    duration=video_data.get("capa", {}).get("duration", 0),
                     width=video_data.get("width", 0),
                     height=video_data.get("height", 0),
-                    file_id=video_data.get("file_id"),
-                    capability=capability
+                    master_url=video_data.get("masterUrl", ""),
+                    backup_urls=video_data.get("backupUrls", []),
+                    stream=video_data.get("stream", {}),
+                    h264=[],  # 简化处理
+                    h265=[],  # 简化处理
+                    av1=[]    # 简化处理
                 )
             
             # 笔记卡片
             note_card = NoteCard(
                 type=note_card_data.get("type", ""),
-                display_title=note_card_data.get("display_title", ""),
+                display_title=note_card_data.get("displayTitle", ""),
                 user=user,
                 interact_info=interact_info,
                 cover=cover,
-                images_list=images_list if images_list else None,
+                images_list=None,  # 暂时不处理图片列表
                 video=video
             )
             
             # Feed对象
             feed = Feed(
-                id=feed_data.get("id", ""),
-                model_type=feed_data.get("model_type", ""),
+                id=feed_id,
+                model_type=model_type,
                 note_card=note_card,
-                track_id=feed_data.get("track_id")
+                track_id=feed_data.get("trackId"),
+                xsec_token=xsec_token,
+                index=index
             )
             
             return feed
             
         except Exception as e:
-            logger.debug(f"转换推荐数据失败: {e}")
+            logger.error(f"转换推荐数据失败: {e}")
             return None
     
     async def _parse_from_dom(self) -> FeedsListResponse:

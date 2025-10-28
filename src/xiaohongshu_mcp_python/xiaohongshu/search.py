@@ -1,6 +1,5 @@
 """
 小红书搜索功能实现
-参考 Go 版本的设计，提供简洁高效的搜索功能
 """
 
 import asyncio
@@ -27,30 +26,30 @@ class SearchAction:
         
     async def search(self, keyword: str, page_num: int = 1) -> SearchResult:
         """
-        搜索内容（参考Go版本的简洁实现）
+        搜索内容
         
         Args:
             keyword: 搜索关键词
-            page_num: 页码（暂时保留，但主要逻辑参考Go版本）
+            page_num: 页码
             
         Returns:
             搜索结果
         """
         try:
-            # 构建搜索URL（参考Go版本）
+            # 构建搜索URL
             search_url = self._make_search_url(keyword)
             logger.info(f"搜索URL: {search_url}")
             
             # 导航到搜索页面
             await self.page.goto(search_url, wait_until="networkidle")
             
-            # 等待页面稳定（参考Go版本）
+            # 等待页面稳定
             await self.page.wait_for_load_state("networkidle")
             
-            # 等待 __INITIAL_STATE__ 可用（参考Go版本的逻辑）
+            # 等待 __INITIAL_STATE__ 可用
             await self.page.wait_for_function("() => window.__INITIAL_STATE__ !== undefined")
             
-            # 获取 __INITIAL_STATE__ 数据（参考Go版本，避免循环引用）
+            # 获取 __INITIAL_STATE__ 数据
             initial_state_js = """
             () => {
                 if (window.__INITIAL_STATE__) {
@@ -86,7 +85,7 @@ class SearchAction:
                 logger.warning("未找到 __INITIAL_STATE__ 数据")
                 return SearchResult(items=[], has_more=False, total=0)
             
-            # 解析搜索结果（参考Go版本的数据结构）
+            # 解析搜索结果
             return await self._parse_search_results_from_state(result)
             
         except PlaywrightTimeoutError as e:
@@ -98,7 +97,7 @@ class SearchAction:
     
     def _make_search_url(self, keyword: str) -> str:
         """
-        构建搜索URL（参考Go版本的实现）
+        构建搜索URL
         
         Args:
             keyword: 搜索关键词
@@ -115,7 +114,7 @@ class SearchAction:
     
     async def _parse_search_results_from_state(self, state_json: str) -> SearchResult:
         """
-        从 __INITIAL_STATE__ 解析搜索结果（参考Go版本的数据结构）
+        从 __INITIAL_STATE__ 解析搜索结果
         
         Args:
             state_json: __INITIAL_STATE__ 的JSON字符串
@@ -126,7 +125,7 @@ class SearchAction:
         try:
             state_data = json.loads(state_json)
             
-            # 参考Go版本的数据结构：searchResult.Search.Feeds.Value
+            # 数据结构：searchResult.Search.Feeds.Value
             search_data = state_data.get("search", {})
             feeds_data = search_data.get("feeds", {})
             feeds_value = feeds_data.get("_value", [])
@@ -159,7 +158,7 @@ class SearchAction:
     
     def _convert_item_to_feed(self, item: Dict[str, Any]) -> Optional[Feed]:
         """
-        将搜索结果项转换为Feed对象（参考Go版本的数据结构）
+        将搜索结果项转换为Feed对象
         
         Args:
             item: 搜索结果项

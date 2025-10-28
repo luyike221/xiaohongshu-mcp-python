@@ -522,6 +522,53 @@ async def xiaohongshu_get_feeds(
 
 
 @mcp.tool
+async def xiaohongshu_list_feeds(
+    username: Optional[str] = None
+) -> dict:
+    """
+    获取首页推荐Feed列表（使用__INITIAL_STATE__方法，无需登录）
+    
+    Args:
+        username: 用户名（可选，如果不提供则使用全局用户）
+        
+    Returns:
+        首页推荐Feed列表
+    """
+    try:
+        from .service import XiaohongshuService
+        from .browser import BrowserManager
+        
+        current_user = username or GLOBAL_USER
+        
+        # 创建浏览器管理器和服务实例
+        browser_manager = BrowserManager()
+        await browser_manager.start()
+        
+        try:
+            service = XiaohongshuService(browser_manager)
+            
+            # 获取首页推荐Feed列表
+            result = await service.list_feeds(username=current_user)
+            
+            return {
+                "success": result.success,
+                "result": result.dict() if hasattr(result, 'dict') else result.__dict__,
+                "message": "获取首页推荐Feed成功" if result.success else result.error
+            }
+            
+        finally:
+            await browser_manager.stop()
+        
+    except Exception as e:
+        logger.error(f"获取首页推荐Feed失败: {e}")
+        return {
+            "success": False,
+            "error": str(e),
+            "message": "获取首页推荐Feed失败"
+        }
+
+
+@mcp.tool
 async def xiaohongshu_get_user_profile(
     user_id: str,
     username: Optional[str] = None
