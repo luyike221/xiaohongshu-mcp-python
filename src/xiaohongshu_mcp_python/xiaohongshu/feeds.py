@@ -12,6 +12,7 @@ from loguru import logger
 
 from ..types import FeedsListResponse, FeedData, Feed, FeedDetailResponse, FeedDetail, CommentList, FeedDetailData
 from ..config import XiaohongshuUrls, XiaohongshuSelectors, BrowserConfig
+from .anti_bot import AntiBotStrategy
 
 
 class FeedsAction:
@@ -39,15 +40,16 @@ class FeedsAction:
         try:
             logger.info(f"开始获取推荐内容, cursor: {cursor}")
             
+            # 添加随机延迟，模拟人类行为
+            await AntiBotStrategy.add_random_delay(seed=str(cursor or ""))
+            
             # 导航到首页
             url = XiaohongshuUrls.HOME_URL
             if cursor:
                 url += f"?cursor={cursor}"
             
-            await self.page.goto(url, wait_until="networkidle")
-            
-            # 等待页面加载完成
-            await self.page.wait_for_load_state("networkidle")
+            # 使用统一的反爬虫导航策略
+            await AntiBotStrategy.simulate_human_navigation(self.page, url)
             
             # 解析推荐内容
             result = await self._parse_feeds()
@@ -110,59 +112,14 @@ class FeedsAction:
             url = self._make_feed_detail_url(note_id, xsec_token)
             
             # 添加随机延迟，模拟人类行为
-            await asyncio.sleep(1 + (hash(note_id) % 3))
+            await AntiBotStrategy.add_random_delay(seed=note_id)
             
-            # 导航到详情页，使用更自然的等待策略
-            await self.page.goto(url, wait_until="domcontentloaded", timeout=60000)
-            
-            # 等待页面稳定，模拟人类浏览行为
-            await asyncio.sleep(2)
-            
-            # 模拟滚动行为
-            await self.page.evaluate("window.scrollTo(0, 100)")
-            await asyncio.sleep(0.5)
-            await self.page.evaluate("window.scrollTo(0, 0)")
-            
-            # 等待网络空闲
-            await self.page.wait_for_load_state("networkidle", timeout=30000)
+            # 使用统一的反爬虫导航策略
+            await AntiBotStrategy.simulate_human_navigation(self.page, url)
             logger.info("页面加载完成")
             
-            # 获取 window.__INITIAL_STATE__ 数据，使用更简单的方法避免复杂的循环引用处理
-            result = await self.page.evaluate("""
-                () => {
-                    if (window.__INITIAL_STATE__) {
-                        try {
-                            // 直接尝试序列化，如果失败则使用备用方案
-                            return JSON.stringify(window.__INITIAL_STATE__);
-                        } catch (e) {
-                            // 如果遇到循环引用，只提取我们需要的部分
-                            const state = window.__INITIAL_STATE__;
-                            const result = {};
-                            
-                            // 提取 note 相关数据
-                            if (state.note) {
-                                result.note = {};
-                                if (state.note.noteDetailMap) {
-                                    result.note.noteDetailMap = {};
-                                    // 遍历 noteDetailMap，只复制基本数据
-                                    for (const key in state.note.noteDetailMap) {
-                                        const noteDetail = state.note.noteDetailMap[key];
-                                        if (noteDetail && typeof noteDetail === 'object') {
-                                            result.note.noteDetailMap[key] = {
-                                                note: noteDetail.note || {},
-                                                comments: noteDetail.comments || {}
-                                            };
-                                        }
-                                    }
-                                }
-                            }
-                            
-                            return JSON.stringify(result);
-                        }
-                    }
-                    return "";
-                }
-            """)
+            # 使用统一的安全数据提取方法
+            result = await AntiBotStrategy.extract_initial_state_safely(self.page)
             logger.info(f"获取到的 __INITIAL_STATE__ 数据长度: {len(result)}")
             
             if not result:
@@ -790,13 +747,16 @@ class FeedsAction:
             current_items = await self.page.query_selector_all(XiaohongshuSelectors.FEED_ITEM)
             initial_count = len(current_items)
             
-            # 滚动加载
+            # 滚动加载 - 使用统一的反爬虫策略
             for i in range(scroll_count):
-                # 滚动到页面底部
-                await self.page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+                # 添加随机延迟，模拟人类行为
+                await AntiBotStrategy.add_random_delay(base_delay=1.0, max_extra=2, seed=str(i))
                 
-                # 等待新内容加载
-                await asyncio.sleep(2)
+                # 使用统一的自然滚动策略
+                await AntiBotStrategy.simulate_natural_scrolling(self.page, scroll_count=3)
+                
+                # 等待页面稳定
+                await AntiBotStrategy.wait_for_page_stable(self.page)
                 
                 # 检查是否有新内容
                 new_items = await self.page.query_selector_all(XiaohongshuSelectors.FEED_ITEM)

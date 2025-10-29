@@ -21,6 +21,9 @@ from .types import (
     FeedsListResponse,
     SearchResult,
     UserProfileResponse,
+    UserPageData,
+    UserBasicInfo,
+    UserInteractions,
     FeedDetailResponse,
     CommentList,
 )
@@ -316,13 +319,15 @@ class XiaohongshuService:
     async def get_user_profile(
         self,
         user_id: str,
+        xsec_token: str,
         username: Optional[str] = None
     ) -> UserProfileResponse:
         """
         获取用户资料
         
         Args:
-            user_id: 用户ID
+            user_id: 小红书用户ID，从Feed列表获取
+            xsec_token: 访问令牌，从Feed列表的xsecToken字段获取
             username: 当前用户名
             
         Returns:
@@ -331,23 +336,57 @@ class XiaohongshuService:
         try:
             page = await self.browser_manager.get_page()
             if not page:
+                # 返回默认的空数据结构，避免data=None导致的验证错误
                 return UserProfileResponse(
                     success=False,
                     code=500,
                     msg="无法获取浏览器页面",
-                    data=None
+                    data=UserPageData(
+                        basic_info=UserBasicInfo(
+                            user_id=user_id,
+                            nickname="",
+                            avatar="",
+                            desc="",
+                            gender=0,
+                            ip_location="",
+                            red_id=""
+                        ),
+                        interactions=UserInteractions(
+                            follows="0",
+                            fans="0",
+                            interaction="0"
+                        )
+                    )
                 )
             
-            user_action = UserAction(page)
-            return await user_action.get_user_profile(user_id)
+            # 使用新的 UserProfileAction 来获取用户资料
+            from .xiaohongshu.user import UserProfileAction
+            user_profile_action = UserProfileAction(page)
+            return await user_profile_action.user_profile(user_id, xsec_token)
             
         except Exception as e:
             logger.error(f"获取用户资料失败: {e}")
+            # 返回默认的空数据结构，避免data=None导致的验证错误
             return UserProfileResponse(
                 success=False,
                 code=500,
                 msg=f"获取用户资料失败: {str(e)}",
-                data=None
+                data=UserPageData(
+                    basic_info=UserBasicInfo(
+                        user_id=user_id,
+                        nickname="",
+                        avatar="",
+                        desc="",
+                        gender=0,
+                        ip_location="",
+                        red_id=""
+                    ),
+                    interactions=UserInteractions(
+                        follows="0",
+                        fans="0",
+                        interaction="0"
+                    )
+                )
             )
     
     async def get_feed_detail(
