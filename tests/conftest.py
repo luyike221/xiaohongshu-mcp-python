@@ -7,8 +7,8 @@ from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 from xiaohongshu_mcp_python.storage.cookie_storage import CookieStorage
 from xiaohongshu_mcp_python.browser.browser_manager import BrowserManager
-from xiaohongshu_mcp_python.xiaohongshu.login_manager import LoginManager
-from xiaohongshu_mcp_python.xiaohongshu.login_types import LoginStatus
+from xiaohongshu_mcp_python.auth.login_manager import LoginManager
+from xiaohongshu_mcp_python.auth.login_types import LoginStatus
 
 
 @pytest.fixture

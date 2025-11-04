@@ -10,7 +10,7 @@ from pathlib import Path
 project_root = Path(__file__).parent / "src"
 sys.path.insert(0, str(project_root))
 
-from xiaohongshu_mcp_python.xiaohongshu.publish import PublishAction, PublishImageContent
+from xiaohongshu_mcp_python.actions.publish import PublishAction, PublishImageContent
 from xiaohongshu_mcp_python.browser.browser_manager import BrowserManager
 
 class MockContext:

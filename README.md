@@ -16,7 +16,8 @@ xiaohongshu-mcp-python 是一个基于 Python 开发的小红书内容发布自�
 - 🎯 **MCP 协议支持**：完整实现 Model Context Protocol 规范
 - 🌐 **Playwright 驱动**：使用 Playwright 替代 Selenium，性能更优
 - 📦 **uv 包管理**：采用现代 Python 包管理工具 uv
-- 🔧 **环境配置**：支持 .env 文件配置管理
+- 🔧 **环境配置**：支持开发/生产环境切换，.env 文件配置管理
+- 📊 **日志系统**：支持控制台和文件双输出，自动轮转和压缩
 - 🛡️ **类型安全**：完整的类型注解支持
 
 ## 🎯 主要功能
@@ -128,34 +129,158 @@ xiaohongshu-mcp-python 是一个基于 Python 开发的小红书内容发布自�
 
 ### ⚙️ 环境配置
 
-创建 `.env` 文件：
+项目支持**开发环境**和**生产环境**两种模式，可以通过环境变量或 `.env` 文件进行配置。
 
-```env
-# 小红书配置
-XIAOHONGSHU_HEADLESS=true
-XIAOHONGSHU_COOKIES_PATH=./cookies
-XIAOHONGSHU_SCREENSHOTS_PATH=./screenshots
+#### 📋 环境模式说明
 
-# MCP 服务配置
-MCP_HOST=localhost
-MCP_PORT=18060
+| 环境模式 | 浏览器模式 | 日志级别 | 调试模式 | 适用场景 |
+|---------|-----------|---------|---------|---------|
+| **development** (开发) | 有头模式（显示浏览器） | DEBUG | 启用 | 本地开发、调试 |
+| **production** (生产) | 无头模式（后台运行） | INFO | 禁用 | 服务器部署、生产环境 |
 
-# 日志配置
-LOG_LEVEL=INFO
-LOG_FILE=./logs/xiaohongshu-mcp.log
+#### 🔧 配置方式
+
+**方式一：使用 `.env` 文件（推荐）**
+
+1. 复制示例配置文件：
+   ```bash
+   cp .env.example .env
+   ```
+
+2. 编辑 `.env` 文件：
+   ```env
+   # ============ 环境配置 ============
+   # 可选值: development, production
+   # development: 开发环境（有头浏览器、DEBUG日志）
+   # production: 生产环境（无头浏览器、INFO日志）
+   ENV=development
+
+   # ============ 浏览器配置 ============
+   # 是否使用无头浏览器模式
+   # true: 无头模式（不显示浏览器窗口）
+   # false: 有头模式（显示浏览器窗口）
+   # 如果未设置，会根据 ENV 自动决定（开发环境=有头，生产环境=无头）
+   # BROWSER_HEADLESS=false
+
+   # ============ 日志配置 ============
+   # 日志级别: DEBUG, INFO, WARNING, ERROR, CRITICAL
+   # 开发环境默认: DEBUG
+   # 生产环境默认: INFO
+   # LOG_LEVEL=DEBUG
+
+   # 日志文件路径（可选，如果设置则日志会写入文件）
+   # LOG_FILE=logs/xiaohongshu-mcp.log
+
+   # ============ 服务器配置 ============
+   # 服务器监听地址
+   SERVER_HOST=127.0.0.1
+
+   # 服务器端口
+   SERVER_PORT=8000
+
+   # ============ 用户配置 ============
+   # 默认用户名
+   GLOBAL_USER=luyike
+
+   # ============ 超时配置 ============
+   # 页面加载超时时间（毫秒）
+   PAGE_LOAD_TIMEOUT=60000
+
+   # 元素等待超时时间（毫秒）
+   ELEMENT_TIMEOUT=30000
+   ```
+
+**方式二：使用环境变量**
+
+```bash
+# 开发环境
+export ENV=development
+export BROWSER_HEADLESS=false
+export LOG_LEVEL=DEBUG
+
+# 生产环境
+export ENV=production
+export BROWSER_HEADLESS=true
+export LOG_LEVEL=INFO
+```
+
+**方式三：命令行参数（优先级最高）**
+
+```bash
+# 开发模式（默认）
+uv run python -m xiaohongshu_mcp_python.main
+
+# 生产模式
+uv run python -m xiaohongshu_mcp_python.main --env production
+
+# 开发模式但使用无头浏览器
+uv run python -m xiaohongshu_mcp_python.main --env development --headless
+
+# 生产模式但使用有头浏览器（调试用）
+uv run python -m xiaohongshu_mcp_python.main --env production --no-headless
+
+# 自定义日志级别
+uv run python -m xiaohongshu_mcp_python.main --env development --log-level DEBUG
+
+# 指定日志文件
+uv run python -m xiaohongshu_mcp_python.main --log-file logs/app.log
+```
+
+#### 🎛️ 可用配置项
+
+| 配置项 | 环境变量 | 默认值 | 说明 |
+|--------|---------|--------|------|
+| 环境模式 | `ENV` | `development` | `development` 或 `production` |
+| 浏览器模式 | `BROWSER_HEADLESS` | 根据 ENV 自动 | `true`/`false`，未设置时自动决定 |
+| 日志级别 | `LOG_LEVEL` | 根据 ENV 自动 | `DEBUG`/`INFO`/`WARNING`/`ERROR` |
+| 日志文件 | `LOG_FILE` | `None` | 日志文件路径，如果设置则同时写入文件 |
+| 服务器地址 | `SERVER_HOST` | `127.0.0.1` | HTTP 服务器监听地址 |
+| 服务器端口 | `SERVER_PORT` | `8000` | HTTP 服务器端口 |
+| 默认用户 | `GLOBAL_USER` | `luyike` | 默认使用的用户名 |
+| 页面超时 | `PAGE_LOAD_TIMEOUT` | `60000` | 页面加载超时（毫秒） |
+| 元素超时 | `ELEMENT_TIMEOUT` | `30000` | 元素等待超时（毫秒） |
+
+#### 📝 日志系统
+
+日志系统支持以下特性：
+
+- **控制台输出**：默认输出到控制台，支持彩色显示
+- **文件输出**：可通过 `LOG_FILE` 配置同时写入文件
+- **日志轮转**：文件日志自动轮转（10MB）
+- **日志保留**：保留最近 7 天的日志
+- **自动压缩**：旧日志自动压缩为 zip 格式
+
+日志格式：
+```
+{time:YYYY-MM-DD HH:mm:ss} | {level:<8} | {name}:{function}:{line} - {message}
 ```
 
 ### 🎯 启动服务
 
 ```bash
-# 启动 MCP 服务
-uv run python -m src.xiaohongshu_mcp_python.main
+# 开发模式启动（默认）
+uv run python -m xiaohongshu_mcp_python.main
 
-# 或使用项目脚本
-uv run xiaohongshu-mcp
+# 生产模式启动
+uv run python -m xiaohongshu_mcp_python.main --env production
+
+# 查看帮助信息
+uv run python -m xiaohongshu_mcp_python.main --help
 ```
 
-服务将在 `http://localhost:18060/mcp` 启动。
+启动后，服务将在 `http://localhost:8000`（或配置的端口）启动。
+
+启动时会显示环境配置信息：
+```
+============================================================
+小红书 MCP 服务器启动
+运行环境: 开发环境 (development)
+浏览器模式: 有头模式
+日志级别: DEBUG
+服务器地址: http://127.0.0.1:8000
+默认用户: luyike
+============================================================
+```
 
 ## 📖 使用教程
 
@@ -257,7 +382,8 @@ xiaohongshu-mcp-python/
 ├── tests/                       # 测试文件
 ├── docs/                        # 文档
 ├── pyproject.toml              # 项目配置
-├── .env.example                # 环境变量示例
+├── .env.example                # 环境变量示例（开发/生产环境配置）
+├── .env                        # 环境变量文件（需自行创建，已加入 .gitignore）
 └── README.md
 ```
 
@@ -351,6 +477,31 @@ result = await xiaohongshu_publish_video(
 - 每日发布量建议控制在合理范围内
 - 图片格式：JPG, PNG, GIF, WebP
 - 视频格式：MP4, MOV, AVI（建议不超过 1GB）
+
+### 🔐 环境模式最佳实践
+
+#### 开发环境（development）
+- ✅ 使用有头浏览器，方便调试和观察
+- ✅ DEBUG 级别日志，查看详细执行过程
+- ✅ 适合本地开发和问题排查
+
+#### 生产环境（production）
+- ✅ 使用无头浏览器，节省资源
+- ✅ INFO 级别日志，减少日志量
+- ✅ 适合服务器部署和自动化运行
+
+#### 环境切换建议
+```bash
+# 本地开发
+ENV=development python -m xiaohongshu_mcp_python.main
+
+# 服务器部署
+ENV=production python -m xiaohongshu_mcp_python.main
+
+# 或者使用 .env 文件
+# 开发时：.env 中设置 ENV=development
+# 生产时：.env 中设置 ENV=production
+```
 
 ### 🛡️ 风险提示
 

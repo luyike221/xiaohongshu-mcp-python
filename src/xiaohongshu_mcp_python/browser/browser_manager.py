@@ -147,7 +147,19 @@ class BrowserManager:
         
         self._context = await self._browser.new_context(**context_options)
         
-        # 添加反检测脚本
+        # 监听并自动关闭所有弹窗（包括权限请求弹窗）
+        def handle_dialog(dialog):
+            """自动关闭所有弹窗"""
+            logger.debug(f"检测到弹窗: {dialog.type} - {dialog.message}")
+            try:
+                dialog.dismiss()  # 拒绝/关闭弹窗
+                logger.debug("已自动关闭弹窗")
+            except Exception as e:
+                logger.warning(f"关闭弹窗失败: {e}")
+        
+        self._context.on("dialog", handle_dialog)
+        
+        # 添加反检测脚本，包括禁用地理位置
         await self._context.add_init_script("""
             // 移除 webdriver 属性
             Object.defineProperty(navigator, 'webdriver', {
@@ -176,6 +188,17 @@ class BrowserManager:
             delete window.cdc_adoQpoasnfa76pfcZLmcfl_Array;
             delete window.cdc_adoQpoasnfa76pfcZLmcfl_Promise;
             delete window.cdc_adoQpoasnfa76pfcZLmcfl_Symbol;
+            
+            // 禁用地理位置API，避免位置权限弹窗
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition = function(success, error) {
+                    if (error) error({ code: 1, message: "Permission denied" });
+                };
+                navigator.geolocation.watchPosition = function(success, error) {
+                    if (error) error({ code: 1, message: "Permission denied" });
+                };
+                navigator.geolocation.clearWatch = function() {};
+            }
         """)
         
         # 加载 cookies

@@ -175,14 +175,67 @@ ehthumbs.db
 Thumbs.db
 
 # Project specific
-cookies/
-cookies.json
-user_sessions.json
 screenshots/
 logs/
 temp/
 tmp/
 test/
+
+# Sensitive information - Cookies and session data
+# 敏感信息 - Cookies 和会话数据
+cookies/
+cookies.json
+cookies_*.json
+*.cookies
+*.cookie
+
+# User session data
+# 用户会话数据
+user_sessions.json
+user_sessions_*.json
+*.session
+*.sessions
+
+# Authentication tokens and credentials
+# 认证令牌和凭证
+*.token
+*.tokens
+*.key
+*.keys
+*.pem
+*.p12
+*.pfx
+*.jwt
+*.jwk
+
+# Configuration files with sensitive data
+# 包含敏感数据的配置文件
+config.local.*
+config.*.local.*
+.env
+.env.local
+.env.*.local
+# .env.example 应该被提交，所以不忽略
+!.env.example
+secrets.*
+*.secret
+*.secrets
+
+# Database files with sensitive data
+# 包含敏感数据的数据库文件
+*.db
+*.sqlite
+*.sqlite3
+*.db-journal
+
+# Backup files
+# 备份文件
+*.backup
+*.bak
+*.old
+backup/
+backups/
+
 # Playwright
 test-results/
 playwright-report/
@@ -190,4 +243,3 @@ playwright/.cache/
 
 # MCP specific
 mcp-server.log
-*.session

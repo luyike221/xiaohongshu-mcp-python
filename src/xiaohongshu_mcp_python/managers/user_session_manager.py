@@ -4,11 +4,12 @@
 集成用户会话存储和登录会话管理，提供基于用户的会话管理功能。
 """
 
+import asyncio
 from typing import Optional, Dict, Any
 from loguru import logger
 
 from ..storage.user_session_storage import UserSessionStorage
-from ..xiaohongshu.login_session_manager import LoginSessionManager
+from ..auth.login_session_manager import LoginSessionManager
 
 
 class UserSessionManager:
@@ -25,68 +26,82 @@ class UserSessionManager:
         self.login_session_manager = LoginSessionManager()
         
     async def get_or_create_session(self, username: str, 
-                                   headless: bool = True) -> Dict[str, Any]:
+                                   headless: bool = True,
+                                   wait_for_completion: bool = False) -> Dict[str, Any]:
         """
-        获取或创建用户会话
+        获取或创建用户会话（基于本地 cookies）
         
         Args:
             username: 用户名
             headless: 是否使用无头模式
+            wait_for_completion: 是否等待登录完成（阻塞模式），默认False
         
         Returns:
             会话信息字典，包含session_id和状态
         """
-        logger.info(f"为用户 {username} 获取或创建会话")
+        logger.info(f"为用户 {username} 获取或创建会话（基于本地 cookies）")
         
-        # 1. 检查是否存在有效的用户会话
-        existing_session = await self.user_storage.get_user_session(username)
+        # 1. 检查本地 cookies 是否存在且有效
+        session_status = await self.get_user_session_status(username)
         
-        if existing_session:
-            session_id = existing_session["session_id"]
-            logger.info(f"找到用户 {username} 的现有会话: {session_id}")
-            
-            # 2. 检查会话是否仍然有效
-            session_status = await self.login_session_manager.check_session(session_id)
-            
-            if session_status and session_status[0] in ["waiting", "logged_in"]:
-                # 会话仍然有效，更新最后访问时间
-                await self.user_storage.update_last_accessed(username)
-                logger.info(f"用户 {username} 的会话 {session_id} 仍然有效，状态: {session_status[0]}")
-                
-                # 根据实际状态返回相应的消息
-                if session_status[0] == "logged_in":
-                    message = f"用户已登录，使用现有会话 {session_id}"
-                else:
-                    message = f"使用现有会话 {session_id}"
-                
-                return {
-                    "session_id": session_id,
-                    "status": session_status[0],
-                    "is_new": False,
-                    "message": message
-                }
-            else:
-                # 会话已失效，清理存储
-                logger.info(f"用户 {username} 的会话 {session_id} 已失效，将创建新会话")
-                await self.user_storage.remove_user_session(username)
-                # 清理失效的登录会话
-                await self.login_session_manager.remove_session(session_id)
+        if session_status and session_status.get("status") == "logged_in":
+            # 本地 cookies 有效，直接返回已登录状态
+            logger.info(f"用户 {username} 的本地 cookies 有效，已登录")
+            return {
+                "session_id": f"cookie_based_{username}",  # 使用基于 cookies 的标识
+                "status": "logged_in",
+                "is_new": False,
+                "message": "使用本地 cookies，已登录",
+                "cookies_saved": True
+            }
         
-        # 3. 创建新会话
-        logger.info(f"为用户 {username} 创建新会话")
-        session_id = await self.login_session_manager.create_session(headless=headless)
+        # 2. cookies 不存在或已失效，需要创建新登录会话
+        if session_status and session_status.get("status") == "expired":
+            logger.info(f"用户 {username} 的登录已失效，将创建新会话")
+        else:
+            logger.info(f"用户 {username} 没有有效的 cookies，将创建新会话")
+        
+        # 3. 创建新登录会话
+        session_id = await self.login_session_manager.create_session(
+            headless=headless,
+            wait_for_completion=wait_for_completion,
+            username=username
+        )
         
         if session_id:
-            # 4. 保存用户会话映射
+            # 4. 保存用户会话映射（用于跟踪登录流程）
             success = await self.user_storage.set_user_session(username, session_id)
             
             if success:
-                logger.info(f"成功为用户 {username} 创建并保存会话 {session_id}")
+                # 如果等待完成，检查最终的登录状态
+                if wait_for_completion:
+                    # 再次检查本地 cookies（登录完成后应该已保存）
+                    final_status = await self.get_user_session_status(username)
+                    if final_status and final_status.get("status") == "logged_in":
+                        logger.info(f"成功为用户 {username} 创建登录会话并保存 cookies")
+                        return {
+                            "session_id": session_id,
+                            "status": "logged_in",
+                            "is_new": True,
+                            "message": "登录成功，cookies 已保存",
+                            "cookies_saved": True
+                        }
+                    else:
+                        # 登录失败或超时
+                        return {
+                            "session_id": session_id,
+                            "status": "failed",
+                            "is_new": True,
+                            "message": "登录失败或超时",
+                            "cookies_saved": False
+                        }
+                
+                logger.info(f"成功为用户 {username} 创建登录会话 {session_id}")
                 return {
                     "session_id": session_id,
-                    "status": "initializing",
+                    "status": "waiting",
                     "is_new": True,
-                    "message": f"创建新会话 {session_id}"
+                    "message": f"创建新登录会话 {session_id}，请扫描二维码登录"
                 }
             else:
                 logger.error(f"保存用户 {username} 的会话映射失败")
@@ -101,9 +116,86 @@ class UserSessionManager:
                 "error": "创建会话失败"
             }
     
+    async def _check_login_expired(self, username: str) -> bool:
+        """
+        检查登录是否失效（通过 XPath 判断）
+        
+        Args:
+            username: 用户名
+        
+        Returns:
+            如果登录失效返回 True，否则返回 False
+        """
+        try:
+            from ..storage.cookie_storage import CookieStorage
+            from ..browser import BrowserManager
+            
+            # 创建 cookie 存储
+            cookie_storage = CookieStorage(f"cookies_{username}.json")
+            
+            # 如果 cookies 文件不存在，直接返回失效
+            if not cookie_storage.has_cookies():
+                logger.info(f"用户 {username} 的 cookies 文件不存在")
+                return True
+            
+            # 创建临时浏览器实例检查登录状态
+            browser_manager = BrowserManager(cookie_storage=cookie_storage)
+            await browser_manager.start()
+            
+            try:
+                page = await browser_manager.get_page()
+                
+                # 导航到小红书主页
+                await page.goto("https://www.xiaohongshu.com/explore", wait_until="domcontentloaded", timeout=30000)
+                await page.wait_for_load_state("networkidle", timeout=10000)
+                
+                # 等待页面稳定
+                await asyncio.sleep(1)
+                
+                # 检查登录失效的多个条件（或的关系，任意一个出现就说明未登录）
+                
+                # 1. 检查登录失效标识: //div[@class="css-jjnw1w"]
+                try:
+                    expired_element = page.locator('//div[@class="css-jjnw1w"]')
+                    await expired_element.wait_for(state="visible", timeout=2000)
+                    logger.warning(f"检测到登录失效标识（css-jjnw1w），用户 {username} 的登录已失效")
+                    return True
+                except Exception:
+                    pass
+                
+                # 2. 检查登录按钮: //ul//button[normalize-space(.)="登录"]
+                try:
+                    login_button = page.locator('//ul//button[normalize-space(.)="登录"]')
+                    await login_button.wait_for(state="visible", timeout=2000)
+                    logger.warning(f"检测到登录按钮，用户 {username} 未登录")
+                    return True
+                except Exception:
+                    pass
+                
+                # 3. 检查登录容器右侧: //div[@class="login-container"]/div[3][@class="right"]
+                try:
+                    login_container = page.locator('//div[@class="login-container"]/div[3][@class="right"]')
+                    await login_container.wait_for(state="visible", timeout=2000)
+                    logger.warning(f"检测到登录容器右侧元素，用户 {username} 未登录")
+                    return True
+                except Exception:
+                    pass
+                
+                # 所有检查都未通过，说明登录有效
+                logger.info(f"未检测到任何未登录标识，用户 {username} 的登录状态有效")
+                return False
+                    
+            finally:
+                await browser_manager.stop(save_cookies=False)
+                
+        except Exception as e:
+            logger.error(f"检查登录状态时出错: {e}")
+            # 出错时保守处理，认为登录失效
+            return True
+    
     async def get_user_session_status(self, username: str) -> Optional[Dict[str, Any]]:
         """
-        获取用户会话状态
+        获取用户会话状态（基于本地 cookies 文件）
         
         Args:
             username: 用户名
@@ -111,35 +203,42 @@ class UserSessionManager:
         Returns:
             会话状态信息，如果不存在则返回None
         """
-        # 1. 获取用户会话信息
-        user_session = await self.user_storage.get_user_session(username)
+        from ..storage.cookie_storage import CookieStorage
         
-        if not user_session:
-            logger.info(f"用户 {username} 没有活跃会话")
+        # 1. 检查本地 cookies 文件是否存在
+        cookie_storage = CookieStorage(f"cookies_{username}.json")
+        
+        if not cookie_storage.has_cookies():
+            logger.info(f"用户 {username} 的本地 cookies 文件不存在")
             return None
         
-        session_id = user_session["session_id"]
+        logger.info(f"用户 {username} 的本地 cookies 文件存在，检查登录状态")
         
-        # 2. 获取登录会话状态
-        session_status = await self.login_session_manager.check_session(session_id)
+        # 2. 检查登录是否失效
+        is_expired = await self._check_login_expired(username)
         
-        if not session_status:
-            # 会话不存在，清理用户会话映射
-            logger.info(f"用户 {username} 的会话 {session_id} 不存在，清理映射")
+        if is_expired:
+            # 登录失效，清空本地数据
+            logger.info(f"用户 {username} 的登录已失效，清空本地数据")
+            cookie_storage.clear_cookies()
             await self.user_storage.remove_user_session(username)
-            return None
+            
+            return {
+                "success": False,
+                "status": "expired",
+                "message": "登录已失效，请重新登录",
+                "error": "LOGIN_EXPIRED"
+            }
         
-        # 3. 更新最后访问时间
+        # 3. 登录有效，返回成功状态
+        logger.info(f"用户 {username} 的登录状态有效")
         await self.user_storage.update_last_accessed(username)
         
         return {
-            "session_id": session_id,
-            "status": session_status[0],
-            "message": session_status[1],
-            "cookies_saved": session_status[2],
-            "user_info": user_session,
-            "logged_in": session_status[0] == "logged_in",
-            "initializing": session_status[0] == "initializing"
+            "status": "logged_in",
+            "message": "登录状态有效",
+            "logged_in": True,
+            "cookies_saved": True
         }
     
     async def cleanup_user_session(self, username: str) -> bool:
@@ -174,16 +273,6 @@ class UserSessionManager:
             
             # 4. 清理用户会话映射
             await self.user_storage.remove_user_session(username)
-            
-            # 5. 如果没有其他活跃会话，清理共享浏览器
-            try:
-                remaining_sessions = await self.user_storage.load_user_sessions()
-                if not remaining_sessions:
-                    # 没有其他用户会话，可以安全关闭共享浏览器（不保存Cookie）
-                    await self.login_session_manager.cleanup_all(save_cookies=False)
-                    logger.info(f"已清理共享浏览器资源")
-            except Exception as e:
-                logger.warning(f"清理共享浏览器失败: {e}")
             
             logger.info(f"成功清理用户 {username} 的会话 {session_id}")
             return True
