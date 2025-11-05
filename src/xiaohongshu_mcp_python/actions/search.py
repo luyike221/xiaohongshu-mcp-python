@@ -4,6 +4,8 @@
 
 import asyncio
 import json
+import os
+from datetime import datetime
 from typing import List, Optional, Dict, Any
 from urllib.parse import urlencode
 from loguru import logger
@@ -85,6 +87,7 @@ class SearchAction:
                 logger.warning("未找到 __INITIAL_STATE__ 数据")
                 return SearchResult(items=[], has_more=False, total=0)
             
+            
             # 解析搜索结果
             return await self._parse_search_results_from_state(result)
             
@@ -142,6 +145,9 @@ class SearchAction:
                 except Exception as e:
                     logger.warning(f"转换Feed项失败: {e}")
                     continue
+            
+            # 保存数据到临时文件夹
+            self._save_search_data_to_file(state_data, feeds_value, feeds)
             
             return SearchResult(
                 items=feeds,
@@ -248,3 +254,62 @@ class SearchAction:
         except Exception as e:
             logger.error(f"转换Feed对象失败: {e}")
             return None
+    
+    def _save_search_data_to_file(self, state_data: Dict[str, Any], feeds_value: List[Dict], feeds: List[Feed]):
+        """
+        保存搜索数据到临时文件夹
+        
+        Args:
+            state_data: 完整的 __INITIAL_STATE__ 数据
+            feeds_value: 原始搜索结果列表
+            feeds: 转换后的Feed对象列表
+        """
+        try:
+            # 创建临时文件夹
+            save_dir = "temp_search_results"
+            os.makedirs(save_dir, exist_ok=True)
+            
+            # 生成时间戳文件名
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            
+            # 保存原始状态数据
+            state_file = os.path.join(save_dir, f"initial_state_{timestamp}.json")
+            with open(state_file, "w", encoding="utf-8") as f:
+                json.dump(state_data, f, ensure_ascii=False, indent=2)
+            logger.info(f"原始状态数据已保存到: {state_file}")
+            
+            # 保存原始搜索结果
+            feeds_file = os.path.join(save_dir, f"feeds_raw_{timestamp}.json")
+            with open(feeds_file, "w", encoding="utf-8") as f:
+                json.dump(feeds_value, f, ensure_ascii=False, indent=2)
+            logger.info(f"原始搜索结果已保存到: {feeds_file}")
+            
+            # 保存转换后的Feed对象（使用Pydantic的序列化）
+            feeds_dict = []
+            for feed in feeds:
+                try:
+                    # 使用 Pydantic 的 model_dump 方法序列化
+                    if hasattr(feed, 'model_dump'):
+                        feed_dict = feed.model_dump()
+                    elif hasattr(feed, 'dict'):
+                        feed_dict = feed.dict()
+                    else:
+                        # 降级方案：手动构建字典
+                        feed_dict = {
+                            "id": feed.id,
+                            "model_type": feed.model_type,
+                            "track_id": feed.track_id,
+                            "note_card": feed.note_card.model_dump() if feed.note_card and hasattr(feed.note_card, 'model_dump') else None,
+                        }
+                    feeds_dict.append(feed_dict)
+                except Exception as e:
+                    logger.warning(f"序列化Feed对象失败: {e}")
+                    continue
+            
+            parsed_file = os.path.join(save_dir, f"feeds_parsed_{timestamp}.json")
+            with open(parsed_file, "w", encoding="utf-8") as f:
+                json.dump(feeds_dict, f, ensure_ascii=False, indent=2)
+            logger.info(f"解析后的数据已保存到: {parsed_file}")
+            
+        except Exception as e:
+            logger.error(f"保存搜索数据失败: {e}")

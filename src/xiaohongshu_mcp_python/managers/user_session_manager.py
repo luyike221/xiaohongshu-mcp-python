@@ -79,6 +79,16 @@ class UserSessionManager:
                     final_status = await self.get_user_session_status(username)
                     if final_status and final_status.get("status") == "logged_in":
                         logger.info(f"成功为用户 {username} 创建登录会话并保存 cookies")
+                        
+                        # 登录成功后关闭浏览器实例（再次保存cookies以确保不丢失）
+                        try:
+                            login_session = self.login_session_manager.sessions.get(session_id)
+                            if login_session:
+                                await login_session.cleanup(save_cookies=True)
+                                logger.info(f"已关闭用户 {username} 的浏览器实例")
+                        except Exception as e:
+                            logger.warning(f"关闭浏览器实例时出错: {e}")
+                        
                         return {
                             "session_id": session_id,
                             "status": "logged_in",
@@ -87,7 +97,15 @@ class UserSessionManager:
                             "cookies_saved": True
                         }
                     else:
-                        # 登录失败或超时
+                        # 登录失败或超时，也需要关闭浏览器实例（不保存cookies，因为登录失败）
+                        try:
+                            login_session = self.login_session_manager.sessions.get(session_id)
+                            if login_session:
+                                await login_session.cleanup(save_cookies=False)
+                                logger.info(f"登录失败，已关闭用户 {username} 的浏览器实例")
+                        except Exception as e:
+                            logger.warning(f"关闭浏览器实例时出错: {e}")
+                        
                         return {
                             "session_id": session_id,
                             "status": "failed",
@@ -147,12 +165,32 @@ class UserSessionManager:
                 
                 # 导航到小红书主页
                 await page.goto("https://www.xiaohongshu.com/explore", wait_until="domcontentloaded", timeout=30000)
-                await page.wait_for_load_state("networkidle", timeout=10000)
+                
+                # 等待页面加载，但不强制等待 networkidle（可能超时）
+                # 使用更宽松的等待策略
+                try:
+                    await page.wait_for_load_state("networkidle", timeout=5000)
+                except Exception:
+                    # 如果 networkidle 超时，继续等待页面基本加载完成
+                    logger.debug(f"等待 networkidle 超时，继续检查登录状态")
+                    await page.wait_for_load_state("domcontentloaded", timeout=5000)
                 
                 # 等待页面稳定
                 await asyncio.sleep(1)
                 
-                # 检查登录失效的多个条件（或的关系，任意一个出现就说明未登录）
+                # 首先进行正向检查：检查是否存在"我"的链接（已登录标识）
+                # 如果存在，说明已登录，直接返回 False（未失效）
+                try:
+                    user_link_xpath = "//ul/div[contains(@class, 'channel-list-content')]/li//a[normalize-space(.)=\"我\"][contains(@class, 'link-wrapper')]"
+                    user_link = page.locator(user_link_xpath)
+                    await user_link.wait_for(state="visible", timeout=2000)
+                    logger.info(f"检测到'我'的链接，用户 {username} 已登录")
+                    return False  # 已登录，未失效
+                except Exception:
+                    pass
+                
+                # 正向检查失败，进行负向检查：检查登录失效的多个条件
+                # 如果检测到任意一个未登录标识，说明登录失效
                 
                 # 1. 检查登录失效标识: //div[@class="css-jjnw1w"]
                 try:
@@ -181,17 +219,36 @@ class UserSessionManager:
                 except Exception:
                     pass
                 
-                # 所有检查都未通过，说明登录有效
-                logger.info(f"未检测到任何未登录标识，用户 {username} 的登录状态有效")
+                # 所有检查都未通过，说明登录状态不确定
+                # 保守处理：不删除 cookies，返回 False（认为未失效）
+                logger.warning(f"无法确定用户 {username} 的登录状态，保持 cookies 不变")
                 return False
                     
             finally:
                 await browser_manager.stop(save_cookies=False)
                 
         except Exception as e:
+            error_msg = str(e)
             logger.error(f"检查登录状态时出错: {e}")
-            # 出错时保守处理，认为登录失效
-            return True
+            
+            # 如果是超时错误，可能是页面加载慢，但 cookies 可能仍然有效
+            # 如果是其他错误（如网络错误），也不应该直接删除 cookies
+            # 但在 cookies 文件已被清理的情况下，应该返回 True（失效）
+            # 检查 cookies 文件是否还存在
+            try:
+                from ..storage.cookie_storage import CookieStorage
+                cookie_storage = CookieStorage(f"cookies_{username}.json")
+                if not cookie_storage.has_cookies():
+                    # cookies 文件不存在，说明已被清理，返回 True（失效）
+                    logger.info(f"用户 {username} 的 cookies 文件不存在（可能已被清理），返回失效")
+                    return True
+            except Exception:
+                pass
+            
+            # cookies 文件存在但检查出错，保守处理：不删除 cookies，返回 False（认为未失效）
+            # 这样可以避免因为网络问题、超时等问题误删有效的 cookies
+            logger.warning(f"检查登录状态出错，但 cookies 文件存在，保持用户 {username} 的 cookies 不变")
+            return False
     
     async def get_user_session_status(self, username: str) -> Optional[Dict[str, Any]]:
         """
@@ -262,23 +319,47 @@ class UserSessionManager:
             # 2. 清理登录会话（不保存Cookie）
             await self.login_session_manager.remove_session(session_id, save_cookies=False)
             
-            # 3. 清理 cookie 文件（在关闭浏览器之后）
-            try:
-                from ..storage.cookie_storage import CookieStorage
-                cookie_storage = CookieStorage()
-                cookie_storage.clear_cookies()
-                logger.info(f"成功清理用户 {username} 的 cookie 文件")
-            except Exception as e:
-                logger.warning(f"清理 cookie 文件失败: {e}")
-            
-            # 4. 清理用户会话映射
+            # 3. 清理用户会话映射
             await self.user_storage.remove_user_session(username)
             
             logger.info(f"成功清理用户 {username} 的会话 {session_id}")
-            return True
         else:
-            logger.info(f"用户 {username} 没有需要清理的会话")
-            return True
+            logger.info(f"用户 {username} 没有需要清理的会话记录")
+        
+        # 4. 无论是否有会话记录，都要清理 cookie 文件
+        try:
+            from ..storage.cookie_storage import CookieStorage
+            import os
+            from pathlib import Path
+            
+            # 使用与保存时相同的路径逻辑
+            cookie_filename = f"cookies_{username}.json"
+            cookie_storage = CookieStorage(cookie_filename)
+            
+            # 获取实际的文件路径（可能是绝对路径或相对路径）
+            cookie_path = cookie_storage.cookie_path
+            logger.info(f"准备清理用户 {username} 的 cookie 文件: {cookie_path.absolute()}")
+            
+            if cookie_storage.has_cookies():
+                success = cookie_storage.clear_cookies()
+                if success:
+                    # 验证文件是否真的被删除
+                    if cookie_storage.has_cookies():
+                        logger.error(f"清理后 cookie 文件仍然存在: {cookie_path.absolute()}")
+                        return False
+                    else:
+                        logger.info(f"成功清理用户 {username} 的 cookie 文件: {cookie_path.absolute()}")
+                else:
+                    logger.warning(f"清理用户 {username} 的 cookie 文件失败")
+                    return False
+            else:
+                logger.info(f"用户 {username} 的 cookie 文件不存在: {cookie_path.absolute()}")
+        except Exception as e:
+            logger.error(f"清理 cookie 文件时出错: {e}", exc_info=True)
+            return False
+        
+        logger.info(f"用户 {username} 的会话清理完成")
+        return True
     
     async def cleanup_all_expired_sessions(self) -> Dict[str, int]:
         """

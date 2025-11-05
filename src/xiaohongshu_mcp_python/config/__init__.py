@@ -23,6 +23,14 @@ from .types import (
     User,
     Feed,
     Comment,
+    # 数据结构组件
+    InteractInfo,
+    Cover,
+    ImageInfo,
+    DetailImageInfo,
+    Video,
+    VideoCapability,
+    NoteCard,
     # 发布相关
     PublishImageContent,
     PublishVideoContent,
@@ -62,16 +70,28 @@ __all__ = [
     "User",
     "Feed",
     "Comment",
+    # 数据结构组件
+    "InteractInfo",
+    "Cover",
+    "ImageInfo",
+    "DetailImageInfo",
+    "Video",
+    "VideoCapability",
+    "NoteCard",
+    # 发布相关
     "PublishImageContent",
     "PublishVideoContent",
     "PublishResponse",
+    # 搜索相关
     "SearchResult",
+    # 推荐相关
     "FeedsListResponse",
     "FeedData",
     "FeedDetailResponse",
     "FeedDetail",
     "FeedDetailData",
     "CommentList",
+    # 用户相关
     "UserProfileResponse",
     "UserPageData",
     "UserBasicInfo",

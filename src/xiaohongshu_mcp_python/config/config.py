@@ -58,7 +58,7 @@ class XiaohongshuSelectors:
     TAG_INPUT = "input[placeholder*='添加话题']"
     
     # 发布按钮
-    IMAGE_PUBLISH_BUTTON = '//button[contains(@class, "d-button")][contains(@class, "d-button-large")][contains(@class, "publishBtn")]'  # 图片发布按钮
+    IMAGE_PUBLISH_BUTTON = '//button[contains(@class, "d-button")][contains(@class, "d-button-large")][contains(@class, "publishBtn")]'  # 图文发布按钮
     VIDEO_PUBLISH_BUTTON = '//button[normalize-space(.)="发布"]'  # 视频发布按钮
     
     # 搜索相关

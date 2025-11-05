@@ -13,7 +13,6 @@ from pathlib import Path
 from loguru import logger
 
 from .http_server import app
-from ..main import main as mcp_main
 
 
 class AppServer:
@@ -46,6 +45,9 @@ class AppServer:
     async def start_mcp_server(self):
         """启动 MCP 服务器"""
         logger.info("启动 MCP 服务器")
+        
+        # 延迟导入避免循环导入
+        from ..main import main as mcp_main
         
         # 运行 MCP 服务器
         await mcp_main()

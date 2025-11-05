@@ -560,25 +560,60 @@ class PublishAction:
         selector = XiaohongshuSelectors.VIDEO_PUBLISH_BUTTON if is_video else XiaohongshuSelectors.IMAGE_PUBLISH_BUTTON
         
         try:
-            publish_button = await self.page.wait_for_selector(
-                selector,
-                timeout=BrowserConfig.ELEMENT_TIMEOUT
-            )
+            # 使用 locator 更可靠
+            publish_button_locator = self.page.locator(selector)
             
-            if publish_button:
-                # 点击发布按钮
-                await publish_button.click()
-                logger.info("点击发布按钮成功")
+            # 等待按钮可见
+            logger.info(f"等待发布按钮可见，选择器: {selector}")
+            await publish_button_locator.wait_for(state="visible", timeout=BrowserConfig.ELEMENT_TIMEOUT)
+            
+            # 检查按钮是否可点击（不是禁用状态）
+            is_enabled = await publish_button_locator.is_enabled()
+            if not is_enabled:
+                logger.warning("发布按钮被禁用，等待其变为可点击状态")
+                # 等待按钮变为可点击
+                await publish_button_locator.wait_for(state="visible", timeout=10)
+                # 再次检查
+                is_enabled = await publish_button_locator.is_enabled()
+                if not is_enabled:
+                    raise Exception("发布按钮处于禁用状态，无法点击")
+            
+            # 滚动到按钮位置，确保按钮在视口中
+            await publish_button_locator.scroll_into_view_if_needed()
+            await asyncio.sleep(0.5)  # 等待滚动完成
+            
+            # 获取按钮文本（用于日志）
+            button_text = await publish_button_locator.text_content()
+            logger.info(f"找到发布按钮，文本: {button_text}")
+            
+            # 点击按钮
+            await publish_button_locator.click()
+            logger.info("点击发布按钮成功")
+            
+            # 等待页面响应（按钮可能消失或状态改变）
+            await asyncio.sleep(1)
+            
+            # 验证按钮是否被点击（按钮应该消失或状态改变）
+            try:
+                # 如果按钮还存在，等待它消失或状态改变
+                await publish_button_locator.wait_for(state="hidden", timeout=3)
+                logger.info("发布按钮已消失，点击成功")
+            except Exception:
+                # 按钮可能还在，但状态可能已改变，检查是否在发布中
+                is_still_visible = await publish_button_locator.is_visible()
+                if is_still_visible:
+                    logger.info("发布按钮仍然可见，可能正在处理中...")
+                else:
+                    logger.info("发布按钮已隐藏，点击成功")
+            
+            logger.info("已完成发布按钮点击")
                 
-                # 等待一下，让页面有时间响应
-                await asyncio.sleep(2)
-                
-                logger.info("已完成发布按钮点击")
-            else:
-                raise Exception("找不到发布按钮")
-                
-        except PlaywrightTimeoutError:
-            raise Exception("等待发布按钮超时")
+        except PlaywrightTimeoutError as e:
+            logger.error(f"等待发布按钮超时: {e}")
+            raise Exception(f"等待发布按钮超时，选择器: {selector}")
+        except Exception as e:
+            logger.error(f"点击发布按钮失败: {e}")
+            raise Exception(f"点击发布按钮失败: {str(e)}")
     
     async def _wait_for_publish_complete(self) -> Optional[str]:
         """
@@ -591,61 +626,78 @@ class PublishAction:
         
         timeout = BrowserConfig.DEFAULT_TIMEOUT * 2  # 增加发布等待时间
         start_time = asyncio.get_event_loop().time()
+        last_log_time = start_time
+        check_count = 0
+        
+        # 记录初始URL
+        initial_url = self.page.url
         
         while True:
             current_time = asyncio.get_event_loop().time()
-            if (current_time - start_time) * 1000 > timeout:
-                raise Exception("等待发布完成超时")
+            elapsed = (current_time - start_time) * 1000
+            check_count += 1
             
-            # 检查是否发布成功
-            success_element = await self.page.query_selector("text=发布成功")
-            if success_element:
-                logger.info("发布成功")
-                # 尝试获取笔记ID
-                note_id = await self._extract_note_id()
-                return note_id
+            if elapsed > timeout:
+                logger.error(f"等待发布完成超时（{timeout}ms），已等待 {elapsed:.0f}ms")
+                raise Exception(f"等待发布完成超时（{timeout}ms）")
             
-            # 检查是否有错误
-            error_element = await self.page.query_selector(XiaohongshuSelectors.ERROR_MESSAGE)
-            if error_element:
-                error_text = await error_element.text_content()
-                raise Exception(f"发布失败: {error_text}")
-            
-            # 添加发布进度日志
-            logger.info("正在发布中...")
-            await asyncio.sleep(2)  # 增加检查间隔
-    
-    async def _extract_note_id(self) -> Optional[str]:
-        """
-        提取笔记ID
-        
-        Returns:
-            笔记ID
-        """
-        try:
-            # 尝试从URL中提取笔记ID
+            # 1. 检查URL是否改变（发布成功后可能跳转到笔记页面）
             current_url = self.page.url
-            if "/item/" in current_url:
-                note_id = current_url.split("/item/")[-1].split("?")[0]
-                logger.info(f"提取到笔记ID: {note_id}")
-                return note_id
+            if current_url != initial_url and "/discovery/item/" in current_url:
+                logger.info(f"检测到URL变化，可能已跳转到笔记页面: {current_url}")
+                logger.info("发布成功")
+                return None  # 不提取笔记ID，直接返回成功
             
-            # 尝试从页面元素中提取
-            # 这里可以根据实际页面结构调整选择器
-            note_link = await self.page.query_selector("a[href*='/item/']")
-            if note_link:
-                href = await note_link.get_attribute("href")
-                if href and "/item/" in href:
-                    note_id = href.split("/item/")[-1].split("?")[0]
-                    logger.info(f"从链接提取到笔记ID: {note_id}")
-                    return note_id
+            # 2. 检查是否发布成功（多种方式）
+            success_selectors = [
+                "text=发布成功",
+                "text=笔记发布成功",
+                "//div[contains(text(), '发布成功')]",
+                "//div[contains(text(), '笔记发布成功')]"
+            ]
             
-            logger.warning("无法提取笔记ID")
-            return None
+            for success_selector in success_selectors:
+                try:
+                    success_element = await self.page.query_selector(success_selector)
+                    if success_element:
+                        logger.info("检测到发布成功提示")
+                        logger.info("发布成功")
+                        return None  # 不提取笔记ID，直接返回成功
+                except Exception:
+                    pass
             
-        except Exception as e:
-            logger.error(f"提取笔记ID失败: {e}")
-            return None
+            # 3. 检查是否有错误
+            error_selectors = [
+                XiaohongshuSelectors.ERROR_MESSAGE,
+                "text=发布失败",
+                "text=上传失败",
+                "//div[contains(@class, 'error')]",
+                "//div[contains(@class, 'toast-error')]"
+            ]
+            
+            for error_selector in error_selectors:
+                try:
+                    error_element = await self.page.query_selector(error_selector)
+                    if error_element:
+                        error_text = await error_element.text_content()
+                        if error_text and len(error_text.strip()) > 0:
+                            logger.error(f"检测到错误信息: {error_text}")
+                            raise Exception(f"发布失败: {error_text}")
+                except Exception as e:
+                    if "发布失败" in str(e):
+                        raise
+            
+            # 4. 检查发布按钮是否还存在（如果不存在，可能在发布中）
+            publish_button = self.page.locator(XiaohongshuSelectors.IMAGE_PUBLISH_BUTTON)
+            is_button_visible = await publish_button.is_visible()
+            
+            # 5. 每5秒记录一次详细状态（避免日志过多）
+            if current_time - last_log_time >= 5.0:
+                logger.info(f"正在发布中... (已等待 {elapsed/1000:.1f}s / {timeout/1000:.1f}s, 检查次数: {check_count}, 按钮可见: {is_button_visible})")
+                last_log_time = current_time
+            
+            await asyncio.sleep(2)  # 检查间隔
+    
     
     async def _dismiss_permission_popups(self):
         """关闭权限请求弹窗（如位置权限）"""
