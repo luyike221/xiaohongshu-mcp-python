@@ -481,6 +481,54 @@ class PublishAction:
         except PlaywrightTimeoutError:
             raise Exception("等待标题输入框超时")
     
+    async def _find_content_editor(self):
+        """
+        定位正文编辑区（查找容器内的可编辑元素）
+        
+        Returns:
+            编辑器元素，如果找不到则返回None
+        """
+        try:
+            # 先找到编辑器容器
+            container = await self.page.wait_for_selector(
+                XiaohongshuSelectors.CONTENT_TEXTAREA,
+                timeout=BrowserConfig.ELEMENT_TIMEOUT,
+                state="visible"
+            )
+            
+            if not container:
+                logger.warning("未找到正文编辑器容器")
+                return None
+            
+            # 在容器内查找可编辑元素（contenteditable 或 textarea/input）
+            # 优先查找 contenteditable 元素
+            editable_element = await container.query_selector('[contenteditable="true"]')
+            if editable_element:
+                logger.debug("找到 contenteditable 编辑器")
+                return editable_element
+            
+            # 如果没有 contenteditable，查找 textarea 或 input
+            textarea = await container.query_selector('textarea')
+            if textarea:
+                logger.debug("找到 textarea 编辑器")
+                return textarea
+            
+            input_elem = await container.query_selector('input')
+            if input_elem:
+                logger.debug("找到 input 编辑器")
+                return input_elem
+            
+            # 如果都没找到，尝试使用容器本身（某些情况下容器可能就是可编辑的）
+            logger.debug("使用容器作为编辑器")
+            return container
+            
+        except PlaywrightTimeoutError:
+            logger.warning("未找到正文编辑器")
+            return None
+        except Exception as e:
+            logger.warning(f"查找正文编辑器失败: {e}")
+            return None
+    
     async def _input_content(self, content: str):
         """
         输入正文内容
@@ -490,25 +538,32 @@ class PublishAction:
         """
         logger.info("输入正文内容")
         
+        editor = await self._find_content_editor()
+        if not editor:
+            raise Exception("找不到正文输入框")
+        
         try:
-            content_textarea = await self.page.wait_for_selector(
-                XiaohongshuSelectors.CONTENT_TEXTAREA,
-                timeout=BrowserConfig.ELEMENT_TIMEOUT
-            )
+            await editor.click()
+            await asyncio.sleep(0.2)
             
-            if content_textarea:
-                # 使用 fill() 方法，它会自动清空输入框然后填入新内容
-                await content_textarea.fill(content)
-                logger.info("正文内容输入完成")
+            # 检查元素是否可编辑
+            is_contenteditable = await editor.get_attribute("contenteditable")
+            if is_contenteditable == "true":
+                # 对于 contenteditable 元素，使用 innerHTML 或 textContent
+                await editor.evaluate(f"(el) => el.textContent = ''")
+                await editor.type(content, delay=50)
             else:
-                raise Exception("找不到正文输入框")
-                
-        except PlaywrightTimeoutError:
-            raise Exception("等待正文输入框超时")
+                # 对于 input/textarea，使用 fill
+                await editor.fill(content)
+            
+            logger.info("正文内容输入完成")
+        except Exception as e:
+            logger.error(f"输入正文内容失败: {e}")
+            raise Exception(f"输入正文内容失败: {e}")
     
     async def _input_tags(self, tags: List[str]):
         """
-        输入标签
+        输入标签（在正文编辑区以"#话题"形式输入）
         
         Args:
             tags: 标签列表
@@ -518,102 +573,198 @@ class PublishAction:
         
         logger.info(f"输入标签: {tags}")
         
+        # 定位正文编辑区
+        editor = await self._find_content_editor()
+        if not editor:
+            logger.warning("找不到正文编辑器，无法输入标签")
+            return
+        
+        # 进入"可输入话题"的状态
+        await self._prepare_for_tag_input(editor)
+        
+        # 逐个输入标签
         for tag in tags:
-            await self._input_single_tag(tag)
-            await asyncio.sleep(0.5)  # 标签输入间隔
+            await self._input_single_tag_in_editor(editor, tag)
+            await asyncio.sleep(0.5)  # 每个标签完成后等待500ms，给页面时间渲染标签块
     
-    async def _input_single_tag(self, tag: str):
+    async def _prepare_for_tag_input(self, editor):
         """
-        输入单个标签
+        进入"可输入话题"的状态
         
         Args:
-            tag: 标签内容
+            editor: 编辑器元素
+        """
+        logger.debug("准备输入话题状态")
+        
+        try:
+            # 点击编辑器确保焦点
+            await editor.click()
+            await asyncio.sleep(0.2)
+            
+            # 光标准备：执行约20次ArrowDown，确保光标移动到文本末尾
+            for _ in range(20):
+                await self.page.keyboard.press("ArrowDown")
+                await asyncio.sleep(0.05)
+            
+            # 回车两次：创建新的段落或行，避免在已有inline元素中插入#导致联想不弹出
+            await self.page.keyboard.press("Enter")
+            await asyncio.sleep(0.1)
+            await self.page.keyboard.press("Enter")
+            await asyncio.sleep(0.2)
+            
+            logger.debug("已进入可输入话题状态")
+        except Exception as e:
+            logger.warning(f"准备输入话题状态失败: {e}")
+    
+    async def _input_single_tag_in_editor(self, editor, tag: str):
+        """
+        在编辑器中输入单个标签
+        
+        Args:
+            editor: 编辑器元素
+            tag: 标签内容（会自动去掉左侧的#）
+        """
+        # 规范化：去掉左侧的#
+        normalized_tag = tag.lstrip("#").strip()
+        if not normalized_tag:
+            logger.warning(f"标签为空，跳过: {tag}")
+            return
+        
+        logger.debug(f"输入标签: {normalized_tag}")
+        
+        try:
+            # 确保编辑器有焦点
+            await editor.click()
+            await asyncio.sleep(0.1)
+            
+            # 触发联想：先输入#
+            await self.page.keyboard.type("#", delay=50)
+            await asyncio.sleep(0.1)
+            
+            # 逐字符输入标签名（每字符约50ms延时）
+            for ch in normalized_tag:
+                await self.page.keyboard.type(ch, delay=50)
+            
+            # 等待联想容器出现（约1s）
+            await asyncio.sleep(1.0)
+            
+            # 查找联想容器并选择第一项
+            picked = await self._try_pick_topic_suggestion()
+            
+            if not picked:
+                # 未找到或没有联想项：输入一个空格结束当前话题，使其作为"自由话题"插入
+                await self.page.keyboard.press("Space")
+                logger.debug(f"标签作为自由话题插入: {normalized_tag}")
+            else:
+                logger.debug(f"标签通过联想项选择: {normalized_tag}")
+            
+        except Exception as e:
+            logger.warning(f"输入标签失败: {normalized_tag}, 错误: {e}")
+            # 尝试输入空格作为兜底
+            try:
+                await self.page.keyboard.press("Space")
+            except Exception:
+                pass
+    
+    async def _try_pick_topic_suggestion(self) -> bool:
+        """
+        尝试选择第一条话题建议
+        
+        Returns:
+            是否成功选择
         """
         try:
-            tag_input = await self.page.wait_for_selector(
-                XiaohongshuSelectors.TAG_INPUT,
-                timeout=BrowserConfig.ELEMENT_TIMEOUT
+            # 等待联想容器出现
+            container = await self.page.wait_for_selector(
+                XiaohongshuSelectors.TOPIC_SUGGEST_CONTAINER,
+                timeout=1000,
+                state="visible"
             )
             
-            if tag_input:
-                # 添加标签前缀
-                tag_text = tag if tag.startswith(PublishConfig.TAG_PREFIX) else f"{PublishConfig.TAG_PREFIX}{tag}"
-                
-                await tag_input.fill(tag_text)
-                await self.page.keyboard.press("Enter")
-                
-                # 等待标签添加完成
-                await asyncio.sleep(0.5)
-                
-                logger.debug(f"标签添加完成: {tag_text}")
+            if container:
+                # 使用 xpath 在整个页面中查找第一项（因为 xpath 是绝对路径）
+                # 或者如果 xpath 是相对路径，可以在容器内查找
+                # 这里使用 page.query_selector 因为 xpath 是绝对路径
+                item = await self.page.query_selector(XiaohongshuSelectors.TOPIC_SUGGEST_ITEM)
+                if item:
+                    # 检查项是否在容器内（可选验证）
+                    is_visible = await item.is_visible()
+                    if is_visible:
+                        await item.click()
+                        await asyncio.sleep(0.3)
+                        logger.debug("成功选择话题联想项")
+                        return True
+                    else:
+                        logger.debug("话题联想项不可见")
+                else:
+                    logger.debug("联想容器存在但无建议项")
             else:
-                logger.warning("找不到标签输入框")
-                
+                logger.debug("未找到话题联想容器")
         except PlaywrightTimeoutError:
-            logger.warning(f"输入标签超时: {tag}")
-    
-    async def _click_publish_button(self, is_video: bool = False):
-        """点击发布按钮"""
-        logger.info("点击发布按钮")
+            logger.debug("等待话题联想容器超时")
+        except Exception as e:
+            logger.debug(f"选择话题建议失败: {e}")
         
-        # 根据发布类型选择不同的按钮选择器
-        selector = XiaohongshuSelectors.VIDEO_PUBLISH_BUTTON if is_video else XiaohongshuSelectors.IMAGE_PUBLISH_BUTTON
+        return False
+    
+
+    async def _click_publish_button(self, is_video: bool = False):
+        """
+        点击发布按钮
+        
+        Args:
+            is_video: 是否为视频发布
+        """
+        logger.info(f"点击发布按钮 ({'视频' if is_video else '图文'})")
         
         try:
-            # 使用 locator 更可靠
-            publish_button_locator = self.page.locator(selector)
+            if is_video:
+                # 视频发布：等待 button.publishBtn 变为可点击（无 disabled 属性且可见）
+                # 因为视频处理需要较长时间，按钮可点击即表示处理完成
+                logger.info("等待视频发布按钮变为可点击...")
+                publish_button = await self.page.wait_for_selector(
+                    XiaohongshuSelectors.VIDEO_PUBLISH_BUTTON,
+                    timeout=BrowserConfig.ELEMENT_TIMEOUT * 3,  # 视频处理可能需要更长时间
+                    state="visible"
+                )
+                
+                # 等待按钮变为可点击（无 disabled 属性）
+                max_wait = 60  # 最多等待60秒
+                wait_interval = 0.5
+                waited = 0
+                while waited < max_wait:
+                    is_disabled = await publish_button.get_attribute("disabled")
+                    if is_disabled is None or is_disabled == "false":
+                        # 按钮可点击
+                        break
+                    await asyncio.sleep(wait_interval)
+                    waited += wait_interval
+                    logger.debug(f"等待视频处理完成... ({waited:.1f}s)")
+                
+                if waited >= max_wait:
+                    logger.warning("视频处理超时，但继续尝试点击发布按钮")
+                
+                await publish_button.click()
+                logger.info("视频发布按钮已点击")
+            else:
+                # 图文发布：使用 xpath 精确匹配"发布"按钮
+                # 注意：使用 xpath 的 normalize-space 确保精确匹配文本内容
+                publish_button = await self.page.wait_for_selector(
+                    XiaohongshuSelectors.IMAGE_PUBLISH_BUTTON,
+                    timeout=BrowserConfig.ELEMENT_TIMEOUT,
+                    state="visible"
+                )
+                await publish_button.click()
+                logger.info("图文发布按钮已点击")
             
-            # 等待按钮可见
-            logger.info(f"等待发布按钮可见，选择器: {selector}")
-            await publish_button_locator.wait_for(state="visible", timeout=BrowserConfig.ELEMENT_TIMEOUT)
-            
-            # 检查按钮是否可点击（不是禁用状态）
-            is_enabled = await publish_button_locator.is_enabled()
-            if not is_enabled:
-                logger.warning("发布按钮被禁用，等待其变为可点击状态")
-                # 等待按钮变为可点击
-                await publish_button_locator.wait_for(state="visible", timeout=10)
-                # 再次检查
-                is_enabled = await publish_button_locator.is_enabled()
-                if not is_enabled:
-                    raise Exception("发布按钮处于禁用状态，无法点击")
-            
-            # 滚动到按钮位置，确保按钮在视口中
-            await publish_button_locator.scroll_into_view_if_needed()
-            await asyncio.sleep(0.5)  # 等待滚动完成
-            
-            # 获取按钮文本（用于日志）
-            button_text = await publish_button_locator.text_content()
-            logger.info(f"找到发布按钮，文本: {button_text}")
-            
-            # 点击按钮
-            await publish_button_locator.click()
-            logger.info("点击发布按钮成功")
-            
-            # 等待页面响应（按钮可能消失或状态改变）
+            # 等待页面响应
             await asyncio.sleep(1)
             
-            # 验证按钮是否被点击（按钮应该消失或状态改变）
-            try:
-                # 如果按钮还存在，等待它消失或状态改变
-                await publish_button_locator.wait_for(state="hidden", timeout=3)
-                logger.info("发布按钮已消失，点击成功")
-            except Exception:
-                # 按钮可能还在，但状态可能已改变，检查是否在发布中
-                is_still_visible = await publish_button_locator.is_visible()
-                if is_still_visible:
-                    logger.info("发布按钮仍然可见，可能正在处理中...")
-                else:
-                    logger.info("发布按钮已隐藏，点击成功")
-            
-            logger.info("已完成发布按钮点击")
-                
-        except PlaywrightTimeoutError as e:
-            logger.error(f"等待发布按钮超时: {e}")
-            raise Exception(f"等待发布按钮超时，选择器: {selector}")
+        except PlaywrightTimeoutError:
+            raise Exception("等待发布按钮超时")
         except Exception as e:
             logger.error(f"点击发布按钮失败: {e}")
-            raise Exception(f"点击发布按钮失败: {str(e)}")
+            raise Exception(f"点击发布按钮失败: {e}")
     
     async def _wait_for_publish_complete(self) -> Optional[str]:
         """

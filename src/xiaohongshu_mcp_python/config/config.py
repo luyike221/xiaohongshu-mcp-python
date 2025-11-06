@@ -53,13 +53,17 @@ class XiaohongshuSelectors:
     UPLOADED_IMAGE = ".img-preview-area .pr"
     
     # 内容输入
-    TITLE_INPUT = "input[placeholder*='填写标题']"
-    CONTENT_TEXTAREA = '//div[contains(@class, "tiptap")][contains(@class, "ProseMirror")]'
-    TAG_INPUT = "input[placeholder*='添加话题']"
+    TITLE_INPUT = '//input[@class="d-text"]'  # 标题输入框
+    CONTENT_TEXTAREA = '//div[contains(@class, "tiptap")][contains(@class, "ProseMirror")]'  # 正文编辑器（Quill编辑器）
     
-    # 发布按钮
-    IMAGE_PUBLISH_BUTTON = '//button[contains(@class, "d-button")][contains(@class, "d-button-large")][contains(@class, "publishBtn")]'  # 图文发布按钮
-    VIDEO_PUBLISH_BUTTON = '//button[normalize-space(.)="发布"]'  # 视频发布按钮
+    # 标签联想容器
+    TOPIC_SUGGEST_CONTAINER = '//div[@id="creator-editor-topic-container"]'  # 话题联想容器
+    TOPIC_SUGGEST_ITEM = '//div[contains(@class, "is-selected")]/span[@class="name"]'  # 话题联想项
+    
+    # 发布按钮（注意：图文和视频发布按钮不同，不能混用）
+    IMAGE_PUBLISH_BUTTON = '//button/div[normalize-space(.)="发布"]'  # 图文发布按钮
+    VIDEO_PUBLISH_BUTTON = "button.publishBtn"  # 视频发布按钮（保持原有选择器）
+    CANCEL_BUTTON = '//button[contains(@class, "d-button")][contains(@class, "d-button-large")][contains(@class, "cancelBtn")]'  # 暂存离开按钮
     
     # 搜索相关
     SEARCH_INPUT = "input[placeholder*='搜索']"
