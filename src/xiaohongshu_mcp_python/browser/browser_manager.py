@@ -159,7 +159,7 @@ class BrowserManager:
         
         self._context.on("dialog", handle_dialog)
         
-        # 添加反检测脚本，包括禁用地理位置
+        # 添加增强的反检测脚本
         await self._context.add_init_script("""
             // 移除 webdriver 属性
             Object.defineProperty(navigator, 'webdriver', {
@@ -174,31 +174,81 @@ class BrowserManager:
                 app: {}
             };
             
-            // 伪装 plugins
+            // 伪装 plugins - 更真实的插件列表
             Object.defineProperty(navigator, 'plugins', {
-                get: () => [1, 2, 3, 4, 5],
+                get: () => {
+                    return [
+                        { name: 'Chrome PDF Plugin', filename: 'internal-pdf-viewer', description: 'Portable Document Format' },
+                        { name: 'Chrome PDF Viewer', filename: 'mhjfbmdgcfjbbpaeojofohoefgiehjai', description: '' },
+                        { name: 'Native Client', filename: 'internal-nacl-plugin', description: '' }
+                    ];
+                },
             });
             
             // 伪装 languages
             Object.defineProperty(navigator, 'languages', {
-                get: () => ['zh-CN', 'zh', 'en'],
+                get: () => ['zh-CN', 'zh', 'en-US', 'en'],
             });
+            
+            // 伪装 permissions
+            const originalQuery = window.navigator.permissions.query;
+            window.navigator.permissions.query = (parameters) => (
+                parameters.name === 'notifications' ?
+                    Promise.resolve({ state: Notification.permission }) :
+                    originalQuery(parameters)
+            );
             
             // 移除 automation 相关属性
             delete window.cdc_adoQpoasnfa76pfcZLmcfl_Array;
             delete window.cdc_adoQpoasnfa76pfcZLmcfl_Promise;
             delete window.cdc_adoQpoasnfa76pfcZLmcfl_Symbol;
+            delete window.cdc_adoQpoasnfa76pfcZLmcfl_Object;
+            delete window.cdc_adoQpoasnfa76pfcZLmcfl_JSON;
+            
+            // 伪装 hardwareConcurrency
+            Object.defineProperty(navigator, 'hardwareConcurrency', {
+                get: () => 8,
+            });
+            
+            // 伪装 deviceMemory
+            Object.defineProperty(navigator, 'deviceMemory', {
+                get: () => 8,
+            });
+            
+            // 伪装 maxTouchPoints
+            Object.defineProperty(navigator, 'maxTouchPoints', {
+                get: () => 0,
+            });
             
             // 禁用地理位置API，避免位置权限弹窗
             if (navigator.geolocation) {
                 navigator.geolocation.getCurrentPosition = function(success, error) {
-                    if (error) error({ code: 1, message: "Permission denied" });
+                    if (error) error({ code: 1, message: "User denied Geolocation" });
                 };
                 navigator.geolocation.watchPosition = function(success, error) {
-                    if (error) error({ code: 1, message: "Permission denied" });
+                    if (error) error({ code: 1, message: "User denied Geolocation" });
                 };
                 navigator.geolocation.clearWatch = function() {};
             }
+            
+            // 伪装 connection
+            if (navigator.connection) {
+                Object.defineProperty(navigator.connection, 'rtt', {
+                    get: () => 50,
+                });
+            }
+            
+            // 覆盖 toString 方法，使其看起来更真实
+            const originalToString = Function.prototype.toString;
+            Function.prototype.toString = function() {
+                if (this === navigator.geolocation.getCurrentPosition) {
+                    return 'function getCurrentPosition() { [native code] }';
+                }
+                if (this === navigator.geolocation.watchPosition) {
+                    return 'function watchPosition() { [native code] }';
+                }
+                return originalToString.call(this);
+            };
         """)
         
         # 加载 cookies

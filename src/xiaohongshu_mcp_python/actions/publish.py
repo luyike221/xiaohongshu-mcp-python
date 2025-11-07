@@ -136,15 +136,37 @@ class PublishAction:
                 await context.report_progress(progress=20, total=100)
             await self._select_video_publish_tab()
             
-            # 上传视频
+            # 验证会话有效性
+            logger.info("验证会话有效性...")
+            try:
+                # 等待页面稳定
+                await asyncio.sleep(2)
+                
+                # 检查是否被重定向到登录页
+                current_url = self.page.url
+                if "/login" in current_url:
+                    raise Exception("会话已失效，页面重定向到登录页，请重新登录")
+                
+                # 测试会话有效性
+                is_valid = await self._test_session_validity()
+                if not is_valid:
+                    logger.warning("会话验证失败，但继续尝试上传")
+                else:
+                    logger.info("会话验证通过")
+                    
+            except Exception as e:
+                if "会话已失效" in str(e):
+                    raise
+                logger.warning(f"会话验证时出现异常: {e}")
+            
+            # 上传视频（内部已包含等待上传完成的逻辑）
             if context:
                 await context.report_progress(progress=30, total=100)
             await self._upload_video(content.video_path, content.cover_path)
             
-            # 等待视频上传完成
+            # 发送进度通知：视频上传完成
             if context:
                 await context.report_progress(progress=60, total=100)
-            await self._wait_for_video_upload_complete()
             
             # 处理可能出现的权限弹窗
             await self._dismiss_permission_popups()
@@ -259,6 +281,104 @@ class PublishAction:
         except PlaywrightTimeoutError:
             raise Exception("等待视频发布标签超时")
     
+    async def _ensure_on_publish_page(self, timeout_seconds: int = 10):
+        """确保当前停留在发布页面"""
+        logger.info("检查是否停留在发布页面")
+        deadline = asyncio.get_event_loop().time() + timeout_seconds
+        last_url = None
+        attempt = 0
+
+        while asyncio.get_event_loop().time() < deadline:
+            attempt += 1
+            current_url = self.page.url
+            if current_url != last_url:
+                logger.debug(f"当前页面URL: {current_url}")
+                last_url = current_url
+
+            if "/publish/publish" in current_url and "/login" not in current_url:
+                logger.info("确认停留在发布页面")
+                return
+
+            if "/login" in current_url:
+                logger.warning("检测到登录页面，尝试重新导航到发布页")
+                try:
+                    await self.page.goto(
+                        XiaohongshuUrls.PUBLISH_URL,
+                        wait_until="networkidle",
+                        timeout=BrowserConfig.PAGE_LOAD_TIMEOUT
+                    )
+                    await asyncio.sleep(1)
+                    continue
+                except Exception as e:
+                    logger.warning(f"重新导航到发布页失败: {e}")
+
+            logger.debug(f"不在发布页，等待页面稳定 (第 {attempt} 次检测)")
+            await asyncio.sleep(1)
+
+        raise Exception("无法保持在发布页面，请检查登录状态")
+    
+    async def _simulate_human_behavior(self):
+        """模拟人类行为，降低被检测风险"""
+        import random
+        
+        try:
+            # 随机延迟 0.5-2 秒
+            delay = random.uniform(0.5, 2.0)
+            logger.debug(f"随机延迟 {delay:.2f} 秒")
+            await asyncio.sleep(delay)
+            
+            # 模拟鼠标移动
+            viewport_size = self.page.viewport_size
+            if viewport_size:
+                width = viewport_size['width']
+                height = viewport_size['height']
+                
+                # 随机移动鼠标 2-4 次
+                move_count = random.randint(2, 4)
+                for _ in range(move_count):
+                    x = random.randint(100, width - 100)
+                    y = random.randint(100, height - 100)
+                    await self.page.mouse.move(x, y)
+                    await asyncio.sleep(random.uniform(0.1, 0.3))
+                
+                logger.debug(f"模拟了 {move_count} 次鼠标移动")
+            
+            # 随机滚动页面
+            scroll_distance = random.randint(-200, 200)
+            await self.page.evaluate(f"window.scrollBy(0, {scroll_distance})")
+            await asyncio.sleep(random.uniform(0.2, 0.5))
+            logger.debug(f"模拟页面滚动: {scroll_distance}px")
+            
+        except Exception as e:
+            logger.debug(f"模拟人类行为时出错: {e}，继续执行")
+    
+    async def _test_session_validity(self):
+        """测试会话有效性，通过触发一个需要认证的操作"""
+        logger.info("测试会话有效性...")
+        try:
+            # 尝试执行一个需要认证的 JavaScript 调用
+            # 小红书会在页面加载时检查登录状态
+            result = await self.page.evaluate("""
+                () => {
+                    // 检查是否有用户信息
+                    if (window.__INITIAL_STATE__ && window.__INITIAL_STATE__.user) {
+                        return { valid: true, user: window.__INITIAL_STATE__.user };
+                    }
+                    return { valid: false };
+                }
+            """)
+            
+            if result and result.get('valid'):
+                logger.info("会话有效，检测到用户信息")
+                return True
+            else:
+                logger.warning("会话可能无效，未检测到用户信息")
+                return False
+                
+        except Exception as e:
+            logger.warning(f"测试会话有效性时出错: {e}")
+            return False
+
     async def _upload_images(self, image_paths: List[str]):
         """
         上传图片
@@ -310,8 +430,71 @@ class PublishAction:
         
         logger.info(f"开始上传视频: {video_path}")
         
+        # 记录当前URL
+        initial_url = self.page.url
+        logger.info(f"上传前页面URL: {initial_url}")
+        
+        # 设置导航监听器，用于调试
+        navigation_events = []
+        console_messages = []
+        network_errors = []
+        
+        def on_framenavigated(frame):
+            """框架导航事件监听器"""
+            try:
+                if frame == self.page.main_frame:
+                    url = frame.url
+                    event_info = {
+                        "timestamp": asyncio.get_event_loop().time(),
+                        "url": url,
+                        "type": "framenavigated"
+                    }
+                    navigation_events.append(event_info)
+                    logger.warning(f"[导航监听] 主框架导航: {url}")
+            except Exception as e:
+                logger.warning(f"[导航监听] 记录框架导航失败: {e}")
+        
+        def on_console(msg):
+            """控制台消息监听器"""
+            try:
+                msg_text = msg.text
+                msg_type = msg.type
+                # 只记录警告和错误，以及包含导航、跳转、redirect等关键词的消息
+                if msg_type in ['warning', 'error'] or any(keyword in msg_text.lower() for keyword in ['navigate', 'redirect', '跳转', '导航', 'location', 'href']):
+                    console_messages.append({
+                        "timestamp": asyncio.get_event_loop().time(),
+                        "type": msg_type,
+                        "text": msg_text
+                    })
+                    logger.warning(f"[控制台监听] {msg_type.upper()}: {msg_text}")
+            except Exception as e:
+                logger.debug(f"[控制台监听] 记录消息失败: {e}")
+
+        def on_response(response):
+            """网络响应监听器，用于捕捉认证失败"""
+            try:
+                status = response.status
+                if status != 401:
+                    return
+                url = response.url
+                event_info = {
+                    "timestamp": asyncio.get_event_loop().time(),
+                    "status": status,
+                    "url": url
+                }
+                network_errors.append(event_info)
+                logger.warning(f"[网络监听] 捕捉到 401 响应: {url}")
+            except Exception as e:
+                logger.debug(f"[网络监听] 记录响应失败: {e}")
+        
+        # 注册监听器
+        self.page.on("framenavigated", on_framenavigated)
+        self.page.on("console", on_console)
+        self.page.on("response", on_response)
+        
         try:
             # 等待视频上传输入框
+            logger.info("等待视频上传输入框...")
             video_input = await self.page.wait_for_selector(
                 "//input[@class='upload-input']",
                 timeout=BrowserConfig.ELEMENT_TIMEOUT
@@ -320,11 +503,59 @@ class PublishAction:
             if not video_input:
                 raise Exception("找不到视频上传输入框")
             
+            logger.info("找到视频上传输入框，准备上传文件...")
+            await self._ensure_on_publish_page()
+            current_url_before_upload = self.page.url
+            logger.info(f"上传前当前URL: {current_url_before_upload}")
+            
+            # 模拟人类行为：随机延迟和鼠标移动
+            logger.info("模拟人类行为...")
+            await self._simulate_human_behavior()
+            
             # 上传视频
+            logger.info("开始设置文件到上传输入框...")
             await video_input.set_input_files([video_path])
+            logger.info("文件已设置到上传输入框")
+            
+            # 等待一小段时间，观察是否有立即的导航
+            await asyncio.sleep(1)
+            current_url_after_upload = self.page.url
+            logger.info(f"上传后1秒当前URL: {current_url_after_upload}")
+            
+            if current_url_before_upload != current_url_after_upload:
+                logger.warning(f"检测到URL变化: {current_url_before_upload} -> {current_url_after_upload}")
+                
+                # 如果重定向到登录页面（401错误），直接抛出异常
+                if "/login" in current_url_after_upload and "redirectReason=401" in current_url_after_upload:
+                    logger.error("上传文件时触发401错误，会话已失效")
+                    logger.error("这通常是因为：")
+                    logger.error("1. Cookie 已过期或失效")
+                    logger.error("2. 小红书检测到自动化行为")
+                    logger.error("3. 需要重新登录以刷新会话")
+                    raise Exception(
+                        "上传失败：会话已失效 (401 Unauthorized)。"
+                        "请执行以下操作之一：\n"
+                        "1. 调用 xiaohongshu_cleanup_login_session 清理会话\n"
+                        "2. 调用 xiaohongshu_start_login_session(fresh=True) 重新登录\n"
+                        "3. 手动在浏览器中登录小红书创作者中心"
+                    )
             
             # 等待视频上传完成（视频上传时间较长）
+            logger.info("开始等待视频上传完成...")
             await self._wait_for_video_upload_complete()
+            
+            # 记录最终URL和所有导航事件
+            final_url = self.page.url
+            logger.info(f"上传完成后最终URL: {final_url}")
+            logger.info(f"共检测到 {len(navigation_events)} 次导航事件")
+            for i, event in enumerate(navigation_events, 1):
+                logger.info(f"导航事件 {i}: {event}")
+            logger.info(f"共检测到 {len(console_messages)} 条相关控制台消息")
+            for i, msg in enumerate(console_messages, 1):
+                logger.info(f"控制台消息 {i}: [{msg['type']}] {msg['text']}")
+            logger.info(f"共检测到 {len(network_errors)} 条 401 响应")
+            for i, error in enumerate(network_errors, 1):
+                logger.info(f"401 响应 {i}: {error['url']}")
             
             # 如果有封面，上传封面
             if cover_path and os.path.exists(cover_path):
@@ -334,6 +565,30 @@ class PublishAction:
             
         except PlaywrightTimeoutError:
             raise Exception("等待视频上传输入框超时")
+        except Exception as e:
+            # 记录错误时的URL和导航事件
+            error_url = self.page.url
+            logger.error(f"上传视频时发生错误，当前URL: {error_url}")
+            logger.error(f"错误发生前共检测到 {len(navigation_events)} 次导航事件")
+            for i, event in enumerate(navigation_events, 1):
+                logger.error(f"导航事件 {i}: {event}")
+            logger.error(f"错误发生前共检测到 {len(console_messages)} 条相关控制台消息")
+            for i, msg in enumerate(console_messages, 1):
+                logger.error(f"控制台消息 {i}: [{msg['type']}] {msg['text']}")
+            logger.error(f"错误发生前共检测到 {len(network_errors)} 条 401 响应")
+            for i, error in enumerate(network_errors, 1):
+                logger.error(f"401 响应 {i}: {error['url']}")
+            if network_errors or ("/login" in error_url and "redirectReason=401" in error_url):
+                raise Exception("视频上传失败：检测到登录状态失效 (401)，请重新登录后重试") from e
+            raise
+        finally:
+            # 移除监听器
+            try:
+                self.page.remove_listener("framenavigated", on_framenavigated)
+                self.page.remove_listener("console", on_console)
+                self.page.remove_listener("response", on_response)
+            except Exception as e:
+                logger.debug(f"移除监听器失败: {e}")
     
     async def _upload_video_cover(self, cover_path: str):
         """
@@ -404,32 +659,133 @@ class PublishAction:
         
         timeout = 5 * 60 * 1000  # 5分钟超时时间（毫秒）
         start_time = asyncio.get_event_loop().time()
+        navigation_detected = False
+        last_url = self.page.url
+        check_count = 0
+        login_detected_at: Optional[float] = None
+        
+        logger.info(f"[等待上传] 初始URL: {last_url}")
         
         while True:
             current_time = asyncio.get_event_loop().time()
-            if (current_time - start_time) * 1000 > timeout:
+            elapsed_seconds = (current_time - start_time)
+            check_count += 1
+            
+            if elapsed_seconds * 1000 > timeout:
                 raise Exception("等待视频上传完成超时")
             
-            # 检查发布按钮是否可点击（视频上传完成的标志）
-            publish_button = await self.page.query_selector(XiaohongshuSelectors.VIDEO_PUBLISH_BUTTON)
-            if publish_button:
-                # 检查按钮是否可见
-                is_visible = await publish_button.is_visible()
-                if is_visible:
-                    # 检查按钮是否被禁用
-                    is_disabled = await publish_button.is_disabled()
-                    if not is_disabled:
-                        # 检查按钮class是否包含disabled
-                        class_name = await publish_button.get_attribute("class")
-                        if class_name and "disabled" not in class_name:
-                            logger.info("视频上传完成，发布按钮可点击")
-                            break
+            # 监控URL变化
+            try:
+                current_url = self.page.url
+                if current_url != last_url:
+                    logger.warning(f"[等待上传] URL变化检测 (检查 #{check_count}, 已等待 {elapsed_seconds:.1f}秒):")
+                    logger.warning(f"  从: {last_url}")
+                    logger.warning(f"  到: {current_url}")
+                    last_url = current_url
+                    navigation_detected = True
+                if "/login" in current_url and "redirectReason=401" in current_url:
+                    if login_detected_at is None:
+                        login_detected_at = elapsed_seconds
+                        logger.warning("[等待上传] 检测到进入登录页，监控会话恢复")
+                    elif elapsed_seconds - login_detected_at > 15:
+                        raise Exception("检测到会话反复跳转至登录页，可能需要重新登录")
+                else:
+                    login_detected_at = None
+            except Exception as e:
+                logger.debug(f"[等待上传] 获取URL失败: {e}")
             
-            # 检查是否有错误
-            error_element = await self.page.query_selector(XiaohongshuSelectors.ERROR_MESSAGE)
-            if error_element:
-                error_text = await error_element.text_content()
-                raise Exception(f"视频上传失败: {error_text}")
+            try:
+                # 如果检测到导航，等待页面加载完成
+                if navigation_detected:
+                    logger.info("检测到页面导航，等待页面加载完成...")
+                    try:
+                        await self.page.wait_for_load_state("networkidle", timeout=10000)
+                        await asyncio.sleep(1)  # 额外等待1秒确保页面稳定
+                        navigation_detected = False
+                        logger.info("页面导航完成，继续检查上传状态")
+                        
+                        # 导航后检查是否需要重新选择视频标签
+                        # 如果找不到发布按钮，可能需要重新选择标签
+                        temp_button = await self.page.query_selector(XiaohongshuSelectors.VIDEO_PUBLISH_BUTTON)
+                        if not temp_button:
+                            logger.info("导航后未找到发布按钮，尝试重新选择视频标签")
+                            try:
+                                await self._select_video_publish_tab()
+                                await asyncio.sleep(1)  # 等待标签切换
+                            except Exception as e:
+                                logger.warning(f"重新选择视频标签失败: {e}，继续检查")
+                    except PlaywrightTimeoutError:
+                        logger.warning("等待页面加载超时，继续检查")
+                
+                # 检查发布按钮是否可点击（视频上传完成的标志）
+                # 每次循环都重新获取元素，避免元素失效
+                publish_button = await self.page.query_selector(XiaohongshuSelectors.VIDEO_PUBLISH_BUTTON)
+                if publish_button:
+                    try:
+                        # 检查按钮是否可见
+                        is_visible = await publish_button.is_visible()
+                        if is_visible:
+                            # 检查按钮是否被禁用
+                            is_disabled = await publish_button.is_disabled()
+                            if not is_disabled:
+                                # 检查按钮class是否包含disabled
+                                class_name = await publish_button.get_attribute("class")
+                                if class_name and "disabled" not in class_name:
+                                    logger.info("视频上传完成，发布按钮可点击")
+                                    break
+                    except Exception as e:
+                        # 如果元素失效（可能是导航导致），标记导航并继续
+                        if "Execution context was destroyed" in str(e) or "navigation" in str(e).lower():
+                            logger.warning(f"检测到页面导航: {e}")
+                            navigation_detected = True
+                            await asyncio.sleep(2)
+                            continue
+                        else:
+                            raise
+                
+                # 检查是否有错误
+                try:
+                    error_element = await self.page.query_selector(XiaohongshuSelectors.ERROR_MESSAGE)
+                    if error_element:
+                        error_text = await error_element.text_content()
+                        raise Exception(f"视频上传失败: {error_text}")
+                except Exception as e:
+                    # 如果是导航错误，继续等待
+                    if "Execution context was destroyed" in str(e) or "navigation" in str(e).lower():
+                        logger.warning(f"检查错误时检测到导航: {e}")
+                        navigation_detected = True
+                        await asyncio.sleep(2)
+                        continue
+                    elif "视频上传失败" in str(e):
+                        raise
+                
+            except Exception as e:
+                # 捕获导航相关的错误
+                if "Execution context was destroyed" in str(e) or "navigation" in str(e).lower():
+                    logger.warning(f"检测到页面导航: {e}")
+                    navigation_detected = True
+                    await asyncio.sleep(2)
+                    continue
+                else:
+                    # 其他错误直接抛出
+                    raise
+                
+                # 定期输出状态日志（每10次检查或每5秒）
+                if check_count % 10 == 0 or elapsed_seconds % 5 < 2:
+                    try:
+                        current_url_status = self.page.url
+                        publish_button_status = "未找到"
+                        try:
+                            temp_button = await self.page.query_selector(XiaohongshuSelectors.VIDEO_PUBLISH_BUTTON)
+                            if temp_button:
+                                is_visible = await temp_button.is_visible()
+                                is_disabled = await temp_button.is_disabled()
+                                publish_button_status = f"可见={is_visible}, 禁用={is_disabled}"
+                        except:
+                            pass
+                        logger.info(f"[等待上传] 状态检查 #{check_count} - 已等待 {elapsed_seconds:.1f}秒, URL: {current_url_status}, 发布按钮: {publish_button_status}")
+                    except Exception as e:
+                        logger.debug(f"[等待上传] 状态检查失败: {e}")
             
             await asyncio.sleep(2)
     

@@ -13,6 +13,7 @@ class XiaohongshuUrls:
     
     # 基础 URL
     BASE_URL = "https://www.xiaohongshu.com"
+    HOME_URL = "https://www.xiaohongshu.com"  # 首页URL，与BASE_URL相同
     
     # 登录相关
     LOGIN_URL = "https://www.xiaohongshu.com"
@@ -48,7 +49,7 @@ class XiaohongshuSelectors:
     
     # 发布页面
     PUBLISH_TAB = '//div[3][normalize-space(.)="上传图文"][contains(@class, "creator-tab")]'
-    VIDEO_PUBLISH_TAB = "text=上传视频"
+    VIDEO_PUBLISH_TAB = '//div[normalize-space(.)="上传视频"][contains(@class, "creator-tab")]'
     UPLOAD_INPUT = ".upload-input"
     UPLOADED_IMAGE = ".img-preview-area .pr"
     

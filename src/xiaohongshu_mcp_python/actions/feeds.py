@@ -128,8 +128,8 @@ class FeedsAction:
             await AntiBotStrategy.simulate_human_navigation(self.page, url)
             logger.info("页面加载完成")
             
-            # 使用统一的安全数据提取方法
-            result = await AntiBotStrategy.extract_initial_state_safely(self.page)
+            # 使用专门用于笔记详情页的数据提取方法（去除Vue响应式）
+            result = await AntiBotStrategy.extract_feed_detail_state(self.page)
             logger.info(f"获取到的 __INITIAL_STATE__ 数据长度: {len(result)}")
             
             if not result:
@@ -243,15 +243,110 @@ class FeedsAction:
         image_list = []
         images_data = note_data.get("imageList", [])
         for img_data in images_data:
+            # 处理 live_photo 字段：如果是布尔值或非字典类型，设置为 None
+            live_photo = img_data.get("livePhoto")
+            if live_photo is not None and not isinstance(live_photo, dict):
+                # 如果是布尔值 False 或其他非字典类型，设置为 None
+                live_photo = None
+            
             image_info = DetailImageInfo(
                 url=img_data.get("url", ""),
                 width=img_data.get("width", 0),
                 height=img_data.get("height", 0),
                 file_id=img_data.get("fileId"),
-                live_photo=img_data.get("livePhoto"),
+                live_photo=live_photo,
                 format=img_data.get("format")
             )
             image_list.append(image_info)
+        
+        # 解析视频信息（如果存在）
+        video_data = note_data.get("video")
+        parsed_video = None
+        
+        if video_data and isinstance(video_data, dict):
+            try:
+                from ..config import Video, VideoCapability
+                
+                # 提取视频信息，处理不同的数据结构
+                # 支持多种字段名变体
+                video_id = (video_data.get("videoId") or 
+                           video_data.get("video_id") or 
+                           video_data.get("id") or "")
+                
+                # 从不同位置提取视频属性
+                capa = video_data.get("capa", {})
+                duration = (video_data.get("duration") or 
+                           capa.get("duration") or 0)
+                width = (video_data.get("width") or 
+                        capa.get("width") or 0)
+                height = (video_data.get("height") or 
+                         capa.get("height") or 0)
+                
+                master_url = (video_data.get("masterUrl") or 
+                            video_data.get("master_url") or 
+                            video_data.get("url") or "")
+                
+                backup_urls = (video_data.get("backupUrls") or 
+                              video_data.get("backup_urls") or [])
+                if not isinstance(backup_urls, list):
+                    backup_urls = []
+                
+                stream = video_data.get("stream") or {}
+                if not isinstance(stream, dict):
+                    stream = {}
+                
+                media = video_data.get("media") or {}
+                if not isinstance(media, dict):
+                    media = {}
+                
+                # 解析视频编码能力
+                h264 = []
+                h265 = []
+                av1 = []
+                
+                def parse_capabilities(cap_list):
+                    """解析编码能力列表"""
+                    result = []
+                    if cap_list and isinstance(cap_list, list):
+                        for item in cap_list:
+                            if isinstance(item, dict):
+                                try:
+                                    result.append(VideoCapability(**item))
+                                except Exception:
+                                    # 如果解析失败，尝试使用默认值
+                                    result.append(VideoCapability(
+                                        adaptive_type=item.get("adaptive_type", 0),
+                                        media_type=item.get("media_type", 0),
+                                        profile=item.get("profile", ""),
+                                        quality_type=item.get("quality_type", 0)
+                                    ))
+                    return result
+                
+                h264 = parse_capabilities(video_data.get("h264"))
+                h265 = parse_capabilities(video_data.get("h265"))
+                av1 = parse_capabilities(video_data.get("av1"))
+                
+                # 只有当有足够信息时才创建 Video 对象
+                # 至少需要有 video_id 或 master_url 或 duration
+                if video_id or master_url or (duration and duration > 0):
+                    parsed_video = Video(
+                        media=media,
+                        video_id=video_id or "",
+                        duration=int(duration) if duration else 0,
+                        width=int(width) if width else 0,
+                        height=int(height) if height else 0,
+                        master_url=master_url or "",
+                        backup_urls=backup_urls,
+                        stream=stream,
+                        h264=h264,
+                        h265=h265,
+                        av1=av1
+                    )
+                else:
+                    logger.debug("视频数据不完整，跳过视频对象创建")
+            except Exception as e:
+                logger.warning(f"解析视频数据失败: {e}，跳过视频字段")
+                parsed_video = None
         
         # 构建笔记详情对象
         feed_detail = FeedDetail(
@@ -262,7 +357,7 @@ class FeedsAction:
             user=user,
             interact_info=interact_info,
             image_list=image_list if image_list else None,
-            video=note_data.get("video"),
+            video=parsed_video,
             tag_list=note_data.get("tagList"),
             at_user_list=note_data.get("atUserList"),
             collected_count=str(interact_data.get("collectedCount", 0)),

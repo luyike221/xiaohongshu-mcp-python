@@ -209,3 +209,148 @@ class AntiBotStrategy:
         
         result = await page.evaluate(initial_state_js)
         return result
+    
+    @staticmethod
+    async def extract_feed_detail_state(page: Page) -> str:
+        """
+        专门用于笔记详情页的数据提取方法
+        去除 Vue 响应式的 _rawValue / _value 层和响应式字段，仅保留核心内容
+        
+        Args:
+            page: Playwright页面对象
+            
+        Returns:
+            清理后的状态数据 JSON 字符串
+        """
+        logger.debug("提取笔记详情页状态数据（去除Vue响应式）")
+        
+        # 等待__INITIAL_STATE__加载完成
+        await page.wait_for_function("() => window.__INITIAL_STATE__ !== undefined", timeout=30000)
+        
+        # 提取并清理 Vue 响应式数据的 JavaScript 代码
+        extract_js = """
+        () => {
+            if (!window.__INITIAL_STATE__) {
+                return "";
+            }
+            
+            // 递归函数：去除 Vue 响应式包装
+            function unwrapVueReactive(obj, visited = new WeakSet()) {
+                // 处理 null 和 undefined
+                if (obj === null || obj === undefined) {
+                    return obj;
+                }
+                
+                // 处理循环引用
+                if (visited.has(obj)) {
+                    return null;
+                }
+                
+                // 处理基本类型
+                if (typeof obj !== 'object') {
+                    return obj;
+                }
+                
+                // 处理数组
+                if (Array.isArray(obj)) {
+                    visited.add(obj);
+                    return obj.map(item => unwrapVueReactive(item, visited));
+                }
+                
+                // 处理 Vue 响应式对象
+                // Vue 3 使用 _rawValue, Vue 2 可能使用 _value
+                if (obj._rawValue !== undefined) {
+                    visited.add(obj);
+                    return unwrapVueReactive(obj._rawValue, visited);
+                }
+                if (obj._value !== undefined && typeof obj._value === 'object') {
+                    visited.add(obj);
+                    return unwrapVueReactive(obj._value, visited);
+                }
+                
+                // 跳过 Vue 内部属性
+                const vueInternalKeys = [
+                    '__v_isRef', '__v_isReactive', '__v_isReadonly',
+                    '__v_raw', 'dep', 'computed', '_shallow', '_dirty',
+                    'effect', 'deps', 'activeEffect', 'targetMap'
+                ];
+                
+                // 构建清理后的对象
+                const result = {};
+                visited.add(obj);
+                
+                for (const key in obj) {
+                    // 跳过 Vue 内部属性
+                    if (vueInternalKeys.includes(key)) {
+                        continue;
+                    }
+                    
+                    // 跳过函数
+                    if (typeof obj[key] === 'function') {
+                        continue;
+                    }
+                    
+                    // 跳过以 _ 开头的 Vue 内部属性（除了我们需要的）
+                    if (key.startsWith('__') && key !== '__INITIAL_STATE__') {
+                        continue;
+                    }
+                    
+                    // 递归处理值
+                    try {
+                        result[key] = unwrapVueReactive(obj[key], visited);
+                    } catch (e) {
+                        // 如果处理失败，跳过该属性
+                        continue;
+                    }
+                }
+                
+                return result;
+            }
+            
+            try {
+                // 提取并清理状态数据
+                const state = window.__INITIAL_STATE__;
+                const cleanedState = unwrapVueReactive(state);
+                
+                // 序列化为 JSON
+                return JSON.stringify(cleanedState, (key, value) => {
+                    // 再次过滤函数和 Vue 内部属性
+                    if (typeof value === 'function') {
+                        return undefined;
+                    }
+                    if (key && (key.startsWith('__v_') || key === 'dep' || key === 'computed')) {
+                        return undefined;
+                    }
+                    return value;
+                });
+            } catch (e) {
+                console.error('提取笔记详情状态失败:', e);
+                // 如果失败，尝试提取核心部分
+                try {
+                    const state = window.__INITIAL_STATE__;
+                    const coreData = {
+                        global: state.global,
+                        user: state.user,
+                        note: state.note,
+                        board: state.board,
+                        login: state.login,
+                        feed: state.feed,
+                        layout: state.layout,
+                        search: state.search,
+                        notification: state.notification,
+                        redMoji: state.redMoji
+                    };
+                    
+                    // 清理核心数据
+                    const cleanedCore = unwrapVueReactive(coreData);
+                    return JSON.stringify(cleanedCore);
+                } catch (e2) {
+                    console.error('备用提取方案也失败:', e2);
+                    return "{}";
+                }
+            }
+        }
+        """
+        
+        result = await page.evaluate(extract_js)
+        return result

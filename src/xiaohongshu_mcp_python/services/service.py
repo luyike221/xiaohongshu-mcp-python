@@ -361,7 +361,7 @@ class XiaohongshuService:
                 )
             
             # 使用新的 UserProfileAction 来获取用户资料
-            from .actions.user import UserProfileAction
+            from ..actions.user import UserProfileAction
             user_profile_action = UserProfileAction(page)
             return await user_profile_action.user_profile(user_id, xsec_token)
             
