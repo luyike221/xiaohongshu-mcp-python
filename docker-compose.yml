@@ -1,0 +1,58 @@
+version: '3.8'
+
+services:
+  xiaohongshu-mcp:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: xiaohongshu-mcp
+    image: xiaohongshu-mcp:latest
+    restart: unless-stopped
+    ports:
+      - "${SERVER_PORT:-8000}:8000"
+    environment:
+      # 环境配置
+      - ENV=${ENV:-production}
+      - BROWSER_HEADLESS=${BROWSER_HEADLESS:-true}
+      
+      # 日志配置
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - LOG_FILE=${LOG_FILE:-logs/xiaohongshu-mcp.log}
+      - LOG_DIR=${LOG_DIR:-/app/logs}
+      - LOG_RETENTION_DAYS=${LOG_RETENTION_DAYS:-7}
+      - MAX_LOG_SIZE_MB=${MAX_LOG_SIZE_MB:-100}
+      
+      # 服务器配置
+      - SERVER_HOST=${SERVER_HOST:-0.0.0.0}
+      - SERVER_PORT=${SERVER_PORT:-8000}
+      
+      # 用户配置
+      - GLOBAL_USER=${GLOBAL_USER:-luyike}
+      
+      # 超时配置
+      - PAGE_LOAD_TIMEOUT=${PAGE_LOAD_TIMEOUT:-60000}
+      - ELEMENT_TIMEOUT=${ELEMENT_TIMEOUT:-30000}
+    volumes:
+      # 持久化数据目录
+      - ./data:/app/data
+      - ./downloads:/app/downloads
+      - ./logs:/app/logs
+      # 持久化会话和 Cookie
+      - ./cookies.json:/app/cookies.json
+      - ./cookies_luyike.json:/app/cookies_luyike.json
+      - ./user_sessions.json:/app/user_sessions.json
+      # 可选：挂载 .env 文件
+      - ./.env:/app/.env:ro
+    networks:
+      - xiaohongshu-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+networks:
+  xiaohongshu-network:
+    driver: bridge
+

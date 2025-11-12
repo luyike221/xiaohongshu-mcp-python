@@ -243,3 +243,15 @@ playwright/.cache/
 
 # MCP specific
 mcp-server.log
+# data files
+data/
+data_*.json
+data_*.json.gz
+data_*.json.bz2
+data_*.json.xz
+data_*.json.lzma
+data_*.json.lz4
+data_*.json.zstd
+data_*.json.zstd.gz
+data_*.json.zstd.bz2
+data_*.json.zstd.xz
