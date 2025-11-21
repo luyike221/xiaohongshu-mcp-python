@@ -54,6 +54,24 @@ async def test_agent_name():
     assert agent.name == "test_agent"
 
 
+@pytest.mark.asyncio
+async def test_search_education_content():
+    """测试搜索教育相关内容"""
+    # 创建agent
+    agent = await create_xiaohongshu_mcp_agent()
+    
+    # 搜索教育相关内容
+    result = await agent.execute({
+        "content": "搜索关于教育的内容"
+    })
+    
+    # 验证返回结果
+    assert result is not None
+    assert "agent" in result
+    assert result["agent"] == "xiaohongshu_mcp"
+    assert result.get("success", False) is True
+
+
 if __name__ == "__main__":
     # 简单运行测试
     import asyncio
@@ -70,6 +88,12 @@ if __name__ == "__main__":
         print("\n测试3: 执行任务")
         result = await agent.execute({"content": "测试任务"})
         print(f"✓ 任务执行完成: {result.get('success', False)}")
+        
+        print("\n测试4: 搜索教育相关内容")
+        search_result = await agent.execute({"content": "搜索关于教育的内容"})
+        print(f"✓ 搜索完成: {search_result.get('success', False)}")
+        if search_result.get('success'):
+            print(f"  搜索结果: {str(search_result.get('result', {}))}")
         
         print("\n所有测试完成!")
     
