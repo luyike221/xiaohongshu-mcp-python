@@ -8,8 +8,14 @@ from pydantic import BaseModel, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # 加载 .env 文件
-env_path = Path(__file__).parent.parent.parent.parent.parent / ".env"
-load_dotenv(dotenv_path=env_path)
+# 计算项目根目录的 .env 文件路径
+# Path(__file__) = src/ai_social_scheduler/config/model_config.py
+# .parent = src/ai_social_scheduler/config/
+# .parent.parent = src/ai_social_scheduler/
+# .parent.parent.parent = src/
+# .parent.parent.parent.parent = 项目根目录 ai_social_scheduler/
+_env_path = Path(__file__).parent.parent.parent.parent / ".env"
+load_dotenv(dotenv_path=_env_path)
 
 
 class AlibabaBailianConfig(BaseModel):
@@ -50,7 +56,10 @@ class ModelConfig(BaseSettings):
     """模型配置主类"""
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        # 使用绝对路径指向项目根目录的 .env 文件
+        # 这样无论从哪个目录运行，都能正确找到 .env 文件
+        # 如果文件不存在，BaseSettings 会忽略它，只从环境变量读取
+        env_file=str(_env_path),
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",

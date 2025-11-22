@@ -1,6 +1,7 @@
 """小红书MCP服务智能体"""
 
 import asyncio
+import logging
 from typing import Any, Dict, Optional
 
 from langchain_core.messages import HumanMessage
@@ -13,6 +14,10 @@ from ....tools.logging import get_logger
 
 logger = get_logger(__name__)
 
+# 启用 LangChain 调试日志（可选，用于追踪工具调用）
+langchain_logger = logging.getLogger("langchain")
+langchain_agent_logger = logging.getLogger("langchain.agents")
+
 
 async def create_xiaohongshu_mcp_agent(
     name: str = "xiaohongshu_mcp",
@@ -20,6 +25,7 @@ async def create_xiaohongshu_mcp_agent(
     mcp_transport: Optional[str] = None,
     llm_model: str = "qwen-plus",
     llm_temperature: float = 0.7,
+    llm_api_key: Optional[str] = None,
 ) -> "XiaohongshuMCPAgent":
     """创建并初始化小红书MCP服务智能体（工厂函数）
     
@@ -29,6 +35,7 @@ async def create_xiaohongshu_mcp_agent(
         mcp_transport: MCP传输方式
         llm_model: LLM模型名称
         llm_temperature: LLM温度参数
+        llm_api_key: LLM API Key（可选，如果不提供则从环境变量读取）
     
     Returns:
         已初始化的XiaohongshuMCPAgent实例
@@ -39,6 +46,7 @@ async def create_xiaohongshu_mcp_agent(
         mcp_transport=mcp_transport,
         llm_model=llm_model,
         llm_temperature=llm_temperature,
+        llm_api_key=llm_api_key,
     )
     await agent._initialize()
     return agent
@@ -63,6 +71,7 @@ class XiaohongshuMCPAgent:
         mcp_transport: Optional[str] = None,
         llm_model: str = "qwen-plus",
         llm_temperature: float = 0.7,
+        llm_api_key: Optional[str] = None,
     ):
         """初始化小红书MCP服务智能体
         
@@ -72,12 +81,14 @@ class XiaohongshuMCPAgent:
             mcp_transport: MCP传输方式，默认从配置读取
             llm_model: LLM模型名称
             llm_temperature: LLM温度参数
+            llm_api_key: LLM API Key（可选，如果不提供则从环境变量读取）
         """
         self.name = name
         self.mcp_url = mcp_url or mcp_config.xiaohongshu_mcp_url
         self.mcp_transport = mcp_transport or mcp_config.xiaohongshu_mcp_transport
         self.llm_model = llm_model
         self.llm_temperature = llm_temperature
+        self.llm_api_key = llm_api_key
         self.logger = logger
         
         # 延迟初始化的组件
@@ -102,7 +113,8 @@ class XiaohongshuMCPAgent:
             # 初始化LLM客户端
             self._llm_client = QwenClient(
                 model=self.llm_model,
-                temperature=self.llm_temperature
+                temperature=self.llm_temperature,
+                api_key=self.llm_api_key
             )
             
             # 初始化MCP客户端
@@ -171,17 +183,79 @@ class XiaohongshuMCPAgent:
             self.logger.info(
                 "Executing Xiaohongshu MCP Agent",
                 agent=self.name,
-                message_count=len(messages)
+                message_count=len(messages),
+                message_content=str(messages[0].content) if messages else "N/A"
             )
             
             # 执行Agent
-            result = await self._agent.ainvoke({
-                "messages": messages
-            })
+            self.logger.info(
+                "Invoking agent with LLM",
+                agent=self.name,
+                llm_model=self.llm_model,
+                tool_count=len(self._tools) if self._tools else 0,
+                available_tools=[tool.name for tool in self._tools] if self._tools else []
+            )
+            
+            # 临时启用 LangChain 调试日志（如果日志级别是 DEBUG）
+            original_level = langchain_logger.level
+            std_logger = logging.getLogger(__name__)
+            if std_logger.isEnabledFor(logging.DEBUG):
+                langchain_logger.setLevel(logging.DEBUG)
+                langchain_agent_logger.setLevel(logging.DEBUG)
+            
+            try:
+                # 使用 asyncio.wait_for 添加超时保护
+                timeout = self._llm_client.timeout if self._llm_client else 120
+                self.logger.debug(f"Setting agent execution timeout to {timeout} seconds")
+                
+                result = await asyncio.wait_for(
+                    self._agent.ainvoke({
+                        "messages": messages
+                    }),
+                    timeout=timeout * 2  # Agent 执行可能需要更长时间（包含工具调用）
+                )
+                
+                self.logger.info(
+                    "Agent LLM invocation completed",
+                    agent=self.name,
+                    result_type=type(result).__name__,
+                    has_messages="messages" in result if isinstance(result, dict) else False
+                )
+                
+                # 记录返回的消息内容（用于调试）
+                if isinstance(result, dict) and "messages" in result:
+                    messages_list = result["messages"]
+                    self.logger.debug(
+                        "Agent returned messages",
+                        message_count=len(messages_list),
+                        last_message_type=type(messages_list[-1]).__name__ if messages_list else None
+                    )
+                    
+            except asyncio.TimeoutError:
+                self.logger.error(
+                    "Agent execution timeout",
+                    agent=self.name,
+                    timeout_seconds=timeout * 2
+                )
+                raise TimeoutError(f"Agent execution exceeded {timeout * 2} seconds")
+            except Exception as e:
+                self.logger.error(
+                    "Agent LLM invocation failed",
+                    agent=self.name,
+                    error=str(e),
+                    error_type=type(e).__name__,
+                    exc_info=True
+                )
+                raise
+            finally:
+                # 恢复原始日志级别
+                langchain_logger.setLevel(original_level)
+                langchain_agent_logger.setLevel(original_level)
             
             self.logger.info(
                 "Xiaohongshu MCP Agent execution completed",
-                agent=self.name
+                agent=self.name,
+                has_result=result is not None
             )
             
             return {
