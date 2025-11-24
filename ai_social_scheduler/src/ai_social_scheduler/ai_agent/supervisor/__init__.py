@@ -4,11 +4,13 @@ from .supervisor import Supervisor
 from .decision_engine import DecisionEngine
 from .strategy_manager import StrategyManager
 from .state_manager import StateManager
+from .factory import create_supervisor_with_agents
 
 __all__ = [
     "Supervisor",
     "DecisionEngine",
     "StrategyManager",
     "StateManager",
+    "create_supervisor_with_agents",
 ]
 

@@ -126,19 +126,101 @@ class Supervisor:
         )
         
         try:
+            # 1. 先进行意图识别（如果用户请求中有request字段）
+            user_request = input_data.get("request") or input_data.get("content", "")
+            context = input_data.get("context", {})
+            understanding_result = None
+            
+            if user_request:
+                self.logger.info("Step 1: Understanding user request")
+                understanding_result = await self.decision_engine.understand_request(
+                    user_request,
+                    context
+                )
+                await self.state_manager.record_execution_result(
+                    workflow_id=workflow_id,
+                    step="understand_request",
+                    result=understanding_result,
+                    status="success"
+                )
+                
+                # 如果意图识别推荐的工作流与传入的工作流不一致，使用推荐的工作流
+                recommended_workflow = understanding_result.get("workflow")
+                if recommended_workflow and recommended_workflow != workflow_name:
+                    self.logger.info(
+                        "Workflow changed based on intent understanding",
+                        original=workflow_name,
+                        recommended=recommended_workflow
+                    )
+                    workflow_name = recommended_workflow
+                    # 更新workflow_id
+                    workflow_id = f"{workflow_name}_{input_data.get('user_id', 'unknown')}"
+            
+            # 2. 根据工作流类型执行预处理
+            if workflow_name == "content_publish" and understanding_result:
+                # 生成内容策略
+                self.logger.info("Step 2: Generating content strategy")
+                strategy_result = await self.strategy_manager.generate_content_strategy(
+                    user_request,
+                    {**context, **understanding_result}
+                )
+                await self.state_manager.record_execution_result(
+                    workflow_id=workflow_id,
+                    step="generate_strategy",
+                    result=strategy_result,
+                    status="success"
+                )
+                
+                # 将理解结果和策略添加到input_data中，传递给Supervisor
+                input_data["understanding"] = understanding_result
+                input_data["strategy"] = strategy_result
+            elif understanding_result:
+                # 其他工作流也保存理解结果
+                input_data["understanding"] = understanding_result
+            
             # 获取或创建对应工作流的 Supervisor
             if workflow_name not in self._supervisor_cache:
                 self._supervisor_cache[workflow_name] = self._create_supervisor(workflow_name)
             
             supervisor = self._supervisor_cache[workflow_name]
             
-            # 构建消息
-            messages = [HumanMessage(content=str(input_data))]
+            # 构建消息（包含完整的工作流上下文）
+            # 将上下文信息格式化为更易读的文本
+            context_text = f"""工作流：{workflow_name}
+工作流ID：{workflow_id}
+用户ID：{input_data.get('user_id', 'unknown')}
+用户请求：{input_data.get('request', input_data.get('content', ''))}"""
+            
+            # 如果有理解结果和策略，添加到上下文中
+            if understanding_result:
+                context_text += f"\n\n意图理解结果：\n- 意图：{understanding_result.get('intent', '')}\n- 实体：{understanding_result.get('entities', {})}"
+            
+            if input_data.get('strategy'):
+                strategy = input_data.get('strategy')
+                context_text += f"\n\n内容策略：\n- 话题：{strategy.get('topic', '')}\n- 模板：{strategy.get('template', '')}\n- 风格：{strategy.get('style', '')}\n- 关键词：{strategy.get('keywords', [])}"
+            
+            # 创建新的消息列表，确保没有历史消息污染
+            messages = [HumanMessage(content=context_text)]
+            
+            # 确保使用唯一的 thread_id，避免消息历史冲突
+            # 使用 workflow_id 作为 thread_id，确保每次工作流执行都有独立的消息历史
+            final_config = {
+                "configurable": {
+                    "thread_id": workflow_id,  # 使用 workflow_id 作为 thread_id，确保唯一性
+                }
+            }
+            if config:
+                final_config["configurable"].update(config.get("configurable", {}))
             
             # 执行 Supervisor
+            self.logger.info(
+                "Executing Supervisor graph",
+                workflow_name=workflow_name,
+                thread_id=workflow_id
+            )
             response = await supervisor.ainvoke(
                 {"messages": messages},
-                config=config or {}
+                config=final_config
             )
             
             # 记录成功
