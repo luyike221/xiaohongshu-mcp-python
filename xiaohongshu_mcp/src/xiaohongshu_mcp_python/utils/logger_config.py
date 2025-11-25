@@ -8,6 +8,7 @@ from typing import Optional
 from loguru import logger
 
 from ..config import settings
+from ..config.settings import get_project_root
 
 
 def setup_logger(log_level: Optional[str] = None, log_file: Optional[str] = None) -> None:
@@ -33,7 +34,15 @@ def setup_logger(log_level: Optional[str] = None, log_file: Optional[str] = None
     
     # 如果设置了日志文件，同时输出到文件
     if log_file or settings.LOG_FILE:
-        log_file_path = Path(log_file or settings.LOG_FILE)
+        # 如果 log_file 是相对路径，则基于项目根目录
+        if log_file:
+            log_file_path = Path(log_file)
+            if not log_file_path.is_absolute():
+                log_file_path = get_project_root() / log_file_path
+        else:
+            # settings.LOG_FILE 已经是绝对路径（Path对象）
+            log_file_path = Path(settings.LOG_FILE) if isinstance(settings.LOG_FILE, str) else settings.LOG_FILE
+        
         log_file_path.parent.mkdir(parents=True, exist_ok=True)
         
         # 文件日志使用更详细的格式

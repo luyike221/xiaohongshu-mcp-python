@@ -227,6 +227,7 @@ playwright/.cache/
 
 # MCP specific
 mcp-server.log
+xiaohongshumcp/
 data_*.json
 data_*.json.gz
 data_*.json.bz2

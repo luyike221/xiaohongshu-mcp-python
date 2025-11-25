@@ -4,6 +4,8 @@
 """
 
 from typing import Dict, Any
+from pathlib import Path
+from .settings import get_project_root
 
 
 # ============ 小红书 URL 配置 ============
@@ -203,17 +205,26 @@ class PublishConfig:
 class StorageConfig:
     """存储配置"""
     
-    # Cookie 存储路径
-    COOKIE_DIR = "cookies"
+    # 项目根目录
+    _project_root = get_project_root()
     
-    # 会话存储路径
-    SESSION_DIR = "sessions"
+    # Cookie 存储路径（相对于项目根目录）
+    COOKIE_DIR = _project_root / "cookies"
     
-    # 临时文件路径
-    TEMP_DIR = "temp"
+    # 会话存储路径（相对于项目根目录）
+    SESSION_DIR = _project_root / "sessions"
     
-    # 下载文件路径
-    DOWNLOAD_DIR = "downloads"
+    # 临时文件路径（相对于项目根目录）
+    TEMP_DIR = _project_root / "temp"
+    
+    # 下载文件路径（相对于项目根目录）
+    DOWNLOAD_DIR = _project_root / "downloads"
+    
+    # 数据目录（相对于项目根目录）
+    DATA_DIR = _project_root / "data"
+    
+    # 日志目录（相对于项目根目录）
+    LOG_DIR = _project_root / "logs"
     
     # Cookie 过期时间（秒）
     COOKIE_EXPIRE_TIME = 30 * 24 * 3600  # 30天
@@ -254,6 +265,9 @@ class ApiConfig:
 class LogConfig:
     """日志配置"""
     
+    # 项目根目录
+    _project_root = get_project_root()
+    
     # 日志级别
     LOG_LEVEL = "INFO"
     
@@ -263,8 +277,8 @@ class LogConfig:
         "{name}:{function}:{line} - {message}"
     )
     
-    # 日志文件路径
-    LOG_FILE = "logs/xiaohongshu_mcp.log"
+    # 日志文件路径（相对于项目根目录）
+    LOG_FILE = _project_root / "logs" / "xiaohongshu_mcp.log"
     
     # 日志文件大小限制（字节）
     LOG_FILE_SIZE = 10 * 1024 * 1024  # 10MB
@@ -278,6 +292,9 @@ class LogConfig:
 class GlobalConfig:
     """全局配置"""
     
+    # 项目根目录
+    _project_root = get_project_root()
+    
     # 默认用户名
     DEFAULT_USERNAME = "default_user"
     
@@ -287,8 +304,8 @@ class GlobalConfig:
     # 是否启用详细日志
     VERBOSE = False
     
-    # 数据目录
-    DATA_DIR = "data"
+    # 数据目录（相对于项目根目录）
+    DATA_DIR = _project_root / "data"
     
     # 配置文件路径
     CONFIG_FILE = "config.json"

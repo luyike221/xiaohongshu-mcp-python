@@ -92,3 +92,26 @@ class Settings:
 # 创建全局配置实例
 settings = Settings()
 
+
+def get_project_root() -> Path:
+    """
+    获取项目根目录（xiaohongshu_mcp目录）
+    
+    从当前文件位置向上查找，直到找到包含 pyproject.toml 的目录
+    
+    Returns:
+        项目根目录路径
+    """
+    # 从当前文件位置开始
+    current_file = Path(__file__).resolve()
+    
+    # 向上查找，直到找到包含 pyproject.toml 的目录
+    for parent in current_file.parents:
+        if (parent / "pyproject.toml").exists():
+            return parent
+    
+    # 如果找不到，返回当前文件所在目录的父目录的父目录（通常是项目根目录）
+    # settings.py 在 src/xiaohongshu_mcp_python/config/ 下
+    # 所以向上3级就是项目根目录
+    return current_file.parent.parent.parent.parent
+

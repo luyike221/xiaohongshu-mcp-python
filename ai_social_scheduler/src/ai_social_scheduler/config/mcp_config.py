@@ -25,6 +25,10 @@ class MCPConfig(BaseSettings):
     xiaohongshu_mcp_url: str = "http://127.0.0.1:8002/mcp"
     xiaohongshu_mcp_transport: str = "streamable_http"  # streamable_http 或 stdio
 
+    # 图像视频生成MCP服务配置
+    image_video_mcp_url: str = "http://127.0.0.1:8003/mcp"
+    image_video_mcp_transport: str = "streamable_http"  # streamable_http 或 stdio
+
 
 # 全局MCP配置实例
 mcp_config = MCPConfig()

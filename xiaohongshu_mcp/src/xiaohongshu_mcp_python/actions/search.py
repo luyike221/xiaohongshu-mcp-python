@@ -265,21 +265,23 @@ class SearchAction:
             feeds: 转换后的Feed对象列表
         """
         try:
-            # 创建临时文件夹
-            save_dir = "temp_search_results"
-            os.makedirs(save_dir, exist_ok=True)
+            # 创建临时文件夹（基于项目根目录）
+            from ..config.settings import get_project_root
+            project_root = get_project_root()
+            save_dir = project_root / "temp_search_results"
+            save_dir.mkdir(parents=True, exist_ok=True)
             
             # 生成时间戳文件名
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             
             # 保存原始状态数据
-            state_file = os.path.join(save_dir, f"initial_state_{timestamp}.json")
+            state_file = save_dir / f"initial_state_{timestamp}.json"
             with open(state_file, "w", encoding="utf-8") as f:
                 json.dump(state_data, f, ensure_ascii=False, indent=2)
             logger.info(f"原始状态数据已保存到: {state_file}")
             
             # 保存原始搜索结果
-            feeds_file = os.path.join(save_dir, f"feeds_raw_{timestamp}.json")
+            feeds_file = save_dir / f"feeds_raw_{timestamp}.json"
             with open(feeds_file, "w", encoding="utf-8") as f:
                 json.dump(feeds_value, f, ensure_ascii=False, indent=2)
             logger.info(f"原始搜索结果已保存到: {feeds_file}")
@@ -306,7 +308,7 @@ class SearchAction:
                     logger.warning(f"序列化Feed对象失败: {e}")
                     continue
             
-            parsed_file = os.path.join(save_dir, f"feeds_parsed_{timestamp}.json")
+            parsed_file = save_dir / f"feeds_parsed_{timestamp}.json"
             with open(parsed_file, "w", encoding="utf-8") as f:
                 json.dump(feeds_dict, f, ensure_ascii=False, indent=2)
             logger.info(f"解析后的数据已保存到: {parsed_file}")

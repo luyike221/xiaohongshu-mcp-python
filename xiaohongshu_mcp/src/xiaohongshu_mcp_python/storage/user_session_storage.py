@@ -11,6 +11,8 @@ from typing import Dict, Optional, Any
 from datetime import datetime, timedelta
 from loguru import logger
 
+from ..config.settings import get_project_root
+
 
 class UserSessionStorage:
     """用户会话存储管理器"""
@@ -43,8 +45,9 @@ class UserSessionStorage:
         if env_path:
             return Path(env_path)
         
-        # 默认使用当前目录下的user_sessions.json
-        return Path("user_sessions.json")
+        # 默认使用项目根目录下的user_sessions.json
+        project_root = get_project_root()
+        return project_root / "user_sessions.json"
         
     def _ensure_directory(self) -> None:
         """确保存储文件的目录存在"""

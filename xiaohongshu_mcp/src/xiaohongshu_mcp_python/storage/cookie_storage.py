@@ -10,6 +10,8 @@ from pathlib import Path
 from typing import List, Dict, Any, Optional
 from loguru import logger
 
+from ..config.settings import get_project_root
+
 
 class CookieStorage:
     """Cookie存储管理器"""
@@ -35,20 +37,31 @@ class CookieStorage:
             Cookie文件路径
         """
         if cookie_path:
-            return Path(cookie_path)
+            path = Path(cookie_path)
+            # 如果是相对路径，则基于项目根目录
+            if not path.is_absolute():
+                project_root = get_project_root()
+                return project_root / path
+            return path
         
         # 检查环境变量
         env_path = os.getenv("COOKIES_PATH")
         if env_path:
-            return Path(env_path)
+            path = Path(env_path)
+            # 如果是相对路径，则基于项目根目录
+            if not path.is_absolute():
+                project_root = get_project_root()
+                return project_root / path
+            return path
         
         # 检查/tmp/cookies.json是否存在（向后兼容）
         tmp_path = Path("/tmp/cookies.json")
         if tmp_path.exists():
             return tmp_path
         
-        # 默认使用当前目录下的cookies.json
-        return Path("cookies.json")
+        # 默认使用项目根目录下的cookies.json
+        project_root = get_project_root()
+        return project_root / "cookies.json"
     
     def _ensure_directory(self) -> None:
         """确保Cookie文件的目录存在"""
