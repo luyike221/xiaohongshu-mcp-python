@@ -5,28 +5,30 @@ from typing import Any, Dict, List, Optional
 from typing_extensions import TypedDict
 
 
-class AgentState(TypedDict):
-    """Agent 状态模型"""
+class AgentState(TypedDict, total=False):
+    """Agent 状态模型（LangGraph 节点之间传递的共享状态）"""
 
-    # 工作流状态
+    # 基础标识
     workflow_id: str
-    current_agent: Optional[str]
+    workflow_name: str
+    user_id: str
     status: str
-
-    # 消息和上下文
-    messages: List[Dict[str, Any]]
-    context: Dict[str, Any]
-
-    # 内容相关
-    content: Optional[Dict[str, Any]]
-    content_history: List[Dict[str, Any]]
-
-    # 互动相关
-    interactions: List[Dict[str, Any]]
-
-    # 分析结果
-    analytics: Optional[Dict[str, Any]]
-
-    # 错误信息
+    current_step: Optional[str]
     error: Optional[str]
+    failed_step: Optional[str]
+
+    # 输入与上下文
+    request: str
+    context: Dict[str, Any]
+    messages: List[Dict[str, Any]]
+
+    # 中间产物
+    understanding: Dict[str, Any]
+    strategy: Dict[str, Any]
+    materials: Dict[str, Any]
+    content_result: Dict[str, Any]
+    publish_result: Dict[str, Any]
+
+    # 追踪记录
+    logs: List[Dict[str, Any]]
 

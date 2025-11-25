@@ -8,6 +8,8 @@ from langgraph_supervisor import create_supervisor
 from .decision_engine import DecisionEngine
 from .strategy_manager import StrategyManager
 from .state_manager import StateManager
+from ..graph.state import AgentState
+from ..graph.workflow import create_content_publish_workflow
 from ..prompts import SUPERVISOR_PROMPT
 from ..tools.logging import get_logger
 
@@ -47,6 +49,10 @@ class Supervisor:
         self.strategy_manager = strategy_manager or StrategyManager()
         self.state_manager = state_manager or StateManager()
         self.logger = logger
+        self.agent_registry = {
+            getattr(agent, "name", f"agent_{idx}"): agent
+            for idx, agent in enumerate(self.agents)
+        }
         
         # Supervisor 图将在执行工作流时根据工作流名称动态创建
         self._supervisor_cache: Dict[str, Any] = {}
@@ -57,6 +63,19 @@ class Supervisor:
         Args:
             workflow_name: 工作流名称，用于选择对应的提示词
         """
+        if workflow_name == "content_publish":
+            material_agent = self._get_agent("material_generator")
+            content_agent = self._get_agent("content_generator")
+            publisher_agent = self._get_agent("xiaohongshu_mcp")
+            return create_content_publish_workflow(
+                decision_engine=self.decision_engine,
+                strategy_manager=self.strategy_manager,
+                material_agent=material_agent,
+                content_agent=content_agent,
+                publisher_agent=publisher_agent,
+                state_manager=self.state_manager,
+            )
+
         from ..prompts.supervisor import (
             CONTENT_PUBLISH_SUPERVISOR_PROMPT,
             AUTO_REPLY_SUPERVISOR_PROMPT,
@@ -94,6 +113,11 @@ class Supervisor:
         
         return supervisor
 
+    def _get_agent(self, name: str) -> Any:
+        if name not in self.agent_registry:
+            raise ValueError(f"Agent '{name}' not found，无法构建工作流图")
+        return self.agent_registry[name]
+
     async def execute_workflow(
         self,
         workflow_name: str,
@@ -110,6 +134,9 @@ class Supervisor:
         Returns:
             执行结果
         """
+        if workflow_name == "content_publish":
+            return await self._execute_content_publish_workflow(input_data)
+
         self.logger.info(
             "Workflow execution started",
             workflow_name=workflow_name,
@@ -213,14 +240,25 @@ class Supervisor:
                 final_config["configurable"].update(config.get("configurable", {}))
             
             # 执行 Supervisor
+            # 注意：使用唯一的 thread_id 确保每次执行都有全新的消息历史
+            # 这样可以避免消息历史冲突导致的 tool_calls 错误
             self.logger.info(
                 "Executing Supervisor graph",
                 workflow_name=workflow_name,
                 thread_id=workflow_id
             )
+            
+            # 使用 ainvoke 执行（更稳定，避免消息格式问题）
+            # 如果需要监控进度，可以通过日志查看 agent 的执行情况
             response = await supervisor.ainvoke(
                 {"messages": messages},
                 config=final_config
+            )
+            
+            self.logger.info(
+                "Supervisor graph execution completed",
+                workflow_name=workflow_name,
+                thread_id=workflow_id
             )
             
             # 记录成功
@@ -256,6 +294,54 @@ class Supervisor:
             )
             
             raise
+
+    async def _execute_content_publish_workflow(
+        self,
+        input_data: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        workflow_name = "content_publish"
+        user_request = (
+            input_data.get("request")
+            or input_data.get("content")
+            or input_data.get("user_request")
+        )
+        if not user_request:
+            raise ValueError("content_publish 工作流需要 request/content 字段")
+
+        workflow_id = f"{workflow_name}_{input_data.get('user_id', 'unknown')}"
+
+        if workflow_name not in self._supervisor_cache:
+            self._supervisor_cache[workflow_name] = self._create_supervisor(
+                workflow_name
+            )
+        graph = self._supervisor_cache[workflow_name]
+
+        initial_state: AgentState = {
+            "workflow_id": workflow_id,
+            "workflow_name": workflow_name,
+            "user_id": input_data.get("user_id", "unknown"),
+            "request": user_request,
+            "context": input_data.get("context", {}),
+            "messages": input_data.get("messages", []),
+            "status": "init",
+        }
+
+        self.logger.info(
+            "Executing LangGraph workflow",
+            workflow_name=workflow_name,
+            workflow_id=workflow_id,
+        )
+
+        result_state = await graph.ainvoke(initial_state)
+
+        self.logger.info(
+            "LangGraph workflow completed",
+            workflow_name=workflow_name,
+            workflow_id=workflow_id,
+            status=result_state.get("status"),
+        )
+
+        return result_state  # type: ignore[return-value]
 
     def get_state(self, workflow_id: str) -> Optional[Dict[str, Any]]:
         """获取工作流状态

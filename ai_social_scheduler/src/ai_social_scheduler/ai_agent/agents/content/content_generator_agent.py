@@ -169,11 +169,60 @@ class ContentGeneratorAgent(BaseAgent):
                 response = await self._llm_client.client.ainvoke(messages)
                 result = {"response": response}
             
-            # 解析生成的内容（这里简化处理，实际应该解析JSON）
-            # TODO: 实现JSON解析逻辑
+            # 从 LLM 结果中提取内容
+            try:
+                # 尝试从 result 中提取消息内容
+                if isinstance(result, dict):
+                    # 如果是 Agent 返回的结果
+                    if "messages" in result:
+                        last_message = result["messages"][-1]
+                        if hasattr(last_message, "content"):
+                            content_text = last_message.content
+                        else:
+                            content_text = str(last_message)
+                    elif "response" in result:
+                        # 如果是直接 LLM 调用的结果
+                        response_obj = result["response"]
+                        if hasattr(response_obj, "content"):
+                            content_text = response_obj.content
+                        else:
+                            content_text = str(response_obj)
+                    else:
+                        content_text = str(result)
+                else:
+                    content_text = str(result)
+                
+                # 尝试解析 JSON（LLM 可能返回 JSON 格式）
+                import json
+                import re
+                
+                # 查找 JSON 块
+                json_match = re.search(r'\{[^{}]*"title"[^{}]*\}', content_text, re.DOTALL)
+                if json_match:
+                    json_str = json_match.group(0)
+                    parsed = json.loads(json_str)
+                    generated_content = {
+                        "title": parsed.get("title", strategy.get("topic", "默认标题")),
+                        "content": parsed.get("content", f"这是关于{topic}的精彩内容"),
+                        "tags": parsed.get("tags", keywords or ["标签1", "标签2"])
+                    }
+                else:
+                    # 如果无法解析 JSON，使用文本内容
+                    generated_content = {
+                        "title": strategy.get("topic", "默认标题"),
+                        "content": content_text[:500] if len(content_text) > 500 else content_text,
+                        "tags": keywords or ["标签1", "标签2"]
+                    }
+                    
+            except Exception as parse_error:
+                self.logger.warning(
+                    "Failed to parse LLM output, using fallback",
+                    error=str(parse_error)
+                )
+                # 回退方案：使用策略信息生成基本内容
             generated_content = {
                 "title": strategy.get("topic", "默认标题"),
-                "content": f"这是关于{topic}的内容...",
+                    "content": f"这是关于{topic}的精彩内容。{', '.join(keywords) if keywords else ''}",
                 "tags": keywords or ["标签1", "标签2"]
             }
             
@@ -189,6 +238,60 @@ class ContentGeneratorAgent(BaseAgent):
         except Exception as e:
             self.logger.error(
                 "Content Generator Agent execution failed",
+                error=str(e)
+            )
+            return {
+                "agent": self.name,
+                "title": "",
+                "content": "",
+                "tags": [],
+                "success": False,
+                "error": str(e)
+            }
+    
+    async def run(self, state: Dict[str, Any]) -> Dict[str, Any]:
+        """运行 Agent（LangGraph 兼容接口）
+        
+        Args:
+            state: 工作流状态，包含：
+                - strategy: 内容策略
+                - materials: 素材信息
+                - context: 上下文信息
+                - request: 用户请求
+        
+        Returns:
+            执行结果，包含：
+                - title: 标题
+                - content: 正文
+                - tags: 标签
+                - success: 是否成功
+        """
+        try:
+            # 从 state 中提取策略和素材
+            strategy = state.get("strategy", {})
+            materials = state.get("materials", {})
+            context = state.get("context", {})
+            request = state.get("request", "")
+            
+            # 准备执行参数
+            exec_params = {
+                "strategy": strategy,
+                "topic": strategy.get("topic", ""),
+                "keywords": strategy.get("keywords", []),
+                "template": strategy.get("template", ""),
+                "materials": materials,
+                "context": context,
+                "request": request,
+            }
+            
+            # 调用执行方法
+            result = await self.execute(exec_params)
+            
+            return result
+            
+        except Exception as e:
+            self.logger.error(
+                "Content Generator Agent run failed",
                 error=str(e)
             )
             return {

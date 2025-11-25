@@ -8,7 +8,7 @@ from .strategy_manager import StrategyManager
 from .state_manager import StateManager
 from ..client import QwenClient
 from ..agents.mcp.xhs.xiaohongshu_mcp_agent import create_xiaohongshu_mcp_agent
-from ..agents.video.material_generator_agent import MaterialGeneratorAgent
+from ..agents.mcp.image_video.image_video_mcp_agent import create_image_video_mcp_agent
 from ..agents.content.content_generator_agent import ContentGeneratorAgent
 from ..agents.analysis.data_analysis_agent import DataAnalysisAgent
 from ..agents.exception.exception_handling_agent import ExceptionHandlingAgent
@@ -23,6 +23,8 @@ async def create_supervisor_with_agents(
     llm_api_key: Optional[str] = None,
     mcp_url: Optional[str] = None,
     mcp_transport: Optional[str] = None,
+    image_video_mcp_url: Optional[str] = None,
+    image_video_mcp_transport: Optional[str] = None,
 ) -> Supervisor:
     """创建并初始化 Supervisor 和所有智能体
     
@@ -32,6 +34,8 @@ async def create_supervisor_with_agents(
         llm_api_key: LLM API Key（可选）
         mcp_url: 小红书MCP服务地址（可选）
         mcp_transport: MCP传输方式（可选）
+        image_video_mcp_url: 图像视频生成MCP服务地址（可选）
+        image_video_mcp_transport: 图像视频生成MCP传输方式（可选）
     
     Returns:
         已初始化的Supervisor实例
@@ -60,15 +64,16 @@ async def create_supervisor_with_agents(
     )
     agents.append(xhs_agent)
     
-    # 2. 图视频生成智能体
-    logger.info("Creating Material Generator Agent")
-    material_agent = MaterialGeneratorAgent(
-        name="material_generator",
+    # 2. 图视频生成智能体（使用ImageVideoMCPAgent）
+    logger.info("Creating Image Video MCP Agent (Material Generator)")
+    material_agent = await create_image_video_mcp_agent(
+        name="material_generator",  # 保持名称一致以兼容现有提示词
+        mcp_url=image_video_mcp_url,
+        mcp_transport=image_video_mcp_transport,
         llm_model=llm_model,
         llm_temperature=llm_temperature,
         llm_api_key=llm_api_key,
     )
-    await material_agent._initialize()
     agents.append(material_agent)
     
     # 3. 内容生成智能体
