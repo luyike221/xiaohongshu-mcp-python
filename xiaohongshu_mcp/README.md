@@ -161,6 +161,14 @@ xiaohongshu-mcp-python 是一个基于 Python 开发的小红书内容发布自�
    # false: 有头模式（显示浏览器窗口）
    # 如果未设置，会根据 ENV 自动决定（开发环境=有头，生产环境=无头）
    # BROWSER_HEADLESS=false
+   
+   # 浏览器可执行文件路径（可选，用于使用本地浏览器）
+   # 如果未设置，则使用 Playwright 自带的浏览器
+   # Ubuntu 常见路径：
+   # - Google Chrome: /usr/bin/google-chrome 或 /usr/bin/google-chrome-stable
+   # - Chromium: /usr/bin/chromium 或 /usr/bin/chromium-browser
+   # 使用脚本查找: ./scripts/find_browser.sh
+   # BROWSER_EXECUTABLE_PATH=/usr/bin/google-chrome-stable
 
    # ============ 日志配置 ============
    # 日志级别: DEBUG, INFO, WARNING, ERROR, CRITICAL
@@ -202,6 +210,9 @@ export LOG_LEVEL=DEBUG
 export ENV=production
 export BROWSER_HEADLESS=true
 export LOG_LEVEL=INFO
+
+# 使用本地浏览器（Ubuntu）
+export BROWSER_EXECUTABLE_PATH=/usr/bin/google-chrome-stable
 ```
 
 **方式三：命令行参数（优先级最高）**
@@ -232,6 +243,7 @@ uv run python -m xiaohongshu_mcp_python.main --log-file logs/app.log
 |--------|---------|--------|------|
 | 环境模式 | `ENV` | `development` | `development` 或 `production` |
 | 浏览器模式 | `BROWSER_HEADLESS` | 根据 ENV 自动 | `true`/`false`，未设置时自动决定 |
+| 浏览器路径 | `BROWSER_EXECUTABLE_PATH` | `None` | 本地浏览器可执行文件路径，未设置则使用 Playwright 自带浏览器 |
 | 日志级别 | `LOG_LEVEL` | 根据 ENV 自动 | `DEBUG`/`INFO`/`WARNING`/`ERROR` |
 | 日志文件 | `LOG_FILE` | `None` | 日志文件路径，如果设置则同时写入文件 |
 | 服务器地址 | `SERVER_HOST` | `127.0.0.1` | HTTP 服务器监听地址 |
@@ -254,6 +266,58 @@ uv run python -m xiaohongshu_mcp_python.main --log-file logs/app.log
 ```
 {time:YYYY-MM-DD HH:mm:ss} | {level:<8} | {name}:{function}:{line} - {message}
 ```
+
+#### 🌐 使用本地浏览器（Ubuntu）
+
+默认情况下，项目使用 Playwright 自带的浏览器。如果你想使用系统已安装的浏览器（如 Google Chrome 或 Chromium），可以按以下步骤配置：
+
+**1. 查找本地浏览器路径**
+
+使用提供的脚本查找：
+```bash
+./scripts/find_browser.sh
+```
+
+或者手动查找：
+```bash
+which google-chrome
+which chromium-browser
+which chromium
+```
+
+**2. 配置浏览器路径**
+
+在 `.env` 文件中添加：
+```env
+BROWSER_EXECUTABLE_PATH=/usr/bin/google-chrome-stable
+```
+
+或者使用环境变量：
+```bash
+export BROWSER_EXECUTABLE_PATH=/usr/bin/google-chrome-stable
+```
+
+**3. 常见浏览器路径（Ubuntu）**
+
+- Google Chrome: `/usr/bin/google-chrome` 或 `/usr/bin/google-chrome-stable`
+- Chromium: `/usr/bin/chromium` 或 `/usr/bin/chromium-browser`
+- Snap 安装的 Chromium: `/snap/bin/chromium`
+
+**4. 安装浏览器（如果未安装）**
+
+安装 Google Chrome：
+```bash
+wget https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
+sudo dpkg -i google-chrome-stable_current_amd64.deb
+```
+
+安装 Chromium：
+```bash
+sudo apt-get update
+sudo apt-get install chromium-browser
+```
+
+**注意**：使用本地浏览器时，确保浏览器已正确安装且可执行。如果路径不正确，程序会回退到使用 Playwright 自带的浏览器。
 
 ### 🎯 启动服务
 

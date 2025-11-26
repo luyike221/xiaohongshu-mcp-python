@@ -22,7 +22,8 @@ class BrowserManager:
         headless: bool = False,
         browser_type: str = "chromium",
         user_data_dir: Optional[Path] = None,
-        cookie_storage: Optional[CookieStorage] = None
+        cookie_storage: Optional[CookieStorage] = None,
+        executable_path: Optional[str] = None
     ):
         """
         初始化浏览器管理器
@@ -32,11 +33,20 @@ class BrowserManager:
             browser_type: 浏览器类型 (chromium, firefox, webkit)
             user_data_dir: 用户数据目录
             cookie_storage: Cookie 存储实例
+            executable_path: 浏览器可执行文件路径（用于使用本地浏览器）
+                            如果未设置，则从配置读取或使用 Playwright 自带的浏览器
         """
         self.headless = headless
         self.browser_type = browser_type
         self.user_data_dir = user_data_dir
         self.cookie_storage = cookie_storage or CookieStorage()
+        
+        # 如果未指定 executable_path，尝试从配置读取
+        if executable_path is None:
+            from ..config.settings import Settings
+            executable_path = Settings.BROWSER_EXECUTABLE_PATH
+        
+        self.executable_path = executable_path
         
         self._playwright = None
         self._browser: Optional[Browser] = None
@@ -101,6 +111,8 @@ class BrowserManager:
             return
         
         logger.info(f"启动浏览器 (headless={self.headless}, type={self.browser_type})")
+        if self.executable_path:
+            logger.info(f"使用本地浏览器: {self.executable_path}")
         
         self._playwright = await async_playwright().start()
         
@@ -114,142 +126,26 @@ class BrowserManager:
             "args": BrowserConfig.BROWSER_ARGS
         }
         
+        # 如果指定了浏览器可执行文件路径，使用本地浏览器
+        if self.executable_path:
+            launch_options["executable_path"] = self.executable_path
+        
         # 如果指定了用户数据目录
         if self.user_data_dir:
             launch_options["user_data_dir"] = str(self.user_data_dir)
         
         self._browser = await browser_launcher.launch(**launch_options)
         
-        # 创建浏览器上下文 - 添加反检测配置
+        # 创建浏览器上下文 - 使用默认配置
         context_options = {
             "viewport": {"width": BrowserConfig.VIEWPORT_WIDTH, "height": BrowserConfig.VIEWPORT_HEIGHT},
             "user_agent": BrowserConfig.USER_AGENT,
             "java_script_enabled": True,
             "accept_downloads": True,
             "ignore_https_errors": True,
-            "bypass_csp": True,
-            "extra_http_headers": {
-                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
-                "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
-                "Accept-Encoding": "gzip, deflate, br",
-                "Cache-Control": "no-cache",
-                "Pragma": "no-cache",
-                "Sec-Ch-Ua": '"Google Chrome";v="131", "Chromium";v="131", "Not_A Brand";v="24"',
-                "Sec-Ch-Ua-Mobile": "?0",
-                "Sec-Ch-Ua-Platform": '"Windows"',
-                "Sec-Fetch-Dest": "document",
-                "Sec-Fetch-Mode": "navigate",
-                "Sec-Fetch-Site": "none",
-                "Sec-Fetch-User": "?1",
-                "Upgrade-Insecure-Requests": "1"
-            }
         }
         
         self._context = await self._browser.new_context(**context_options)
-        
-        # 监听并自动关闭所有弹窗（包括权限请求弹窗）
-        def handle_dialog(dialog):
-            """自动关闭所有弹窗"""
-            logger.debug(f"检测到弹窗: {dialog.type} - {dialog.message}")
-            try:
-                dialog.dismiss()  # 拒绝/关闭弹窗
-                logger.debug("已自动关闭弹窗")
-            except Exception as e:
-                logger.warning(f"关闭弹窗失败: {e}")
-        
-        self._context.on("dialog", handle_dialog)
-        
-        # 添加增强的反检测脚本
-        await self._context.add_init_script("""
-            // 移除 webdriver 属性
-            Object.defineProperty(navigator, 'webdriver', {
-                get: () => undefined,
-            });
-            
-            // 伪装 Chrome 对象
-            window.chrome = {
-                runtime: {},
-                loadTimes: function() {},
-                csi: function() {},
-                app: {}
-            };
-            
-            // 伪装 plugins - 更真实的插件列表
-            Object.defineProperty(navigator, 'plugins', {
-                get: () => {
-                    return [
-                        { name: 'Chrome PDF Plugin', filename: 'internal-pdf-viewer', description: 'Portable Document Format' },
-                        { name: 'Chrome PDF Viewer', filename: 'mhjfbmdgcfjbbpaeojofohoefgiehjai', description: '' },
-                        { name: 'Native Client', filename: 'internal-nacl-plugin', description: '' }
-                    ];
-                },
-            });
-            
-            // 伪装 languages
-            Object.defineProperty(navigator, 'languages', {
-                get: () => ['zh-CN', 'zh', 'en-US', 'en'],
-            });
-            
-            // 伪装 permissions
-            const originalQuery = window.navigator.permissions.query;
-            window.navigator.permissions.query = (parameters) => (
-                parameters.name === 'notifications' ?
-                    Promise.resolve({ state: Notification.permission }) :
-                    originalQuery(parameters)
-            );
-            
-            // 移除 automation 相关属性
-            delete window.cdc_adoQpoasnfa76pfcZLmcfl_Array;
-            delete window.cdc_adoQpoasnfa76pfcZLmcfl_Promise;
-            delete window.cdc_adoQpoasnfa76pfcZLmcfl_Symbol;
-            delete window.cdc_adoQpoasnfa76pfcZLmcfl_Object;
-            delete window.cdc_adoQpoasnfa76pfcZLmcfl_JSON;
-            
-            // 伪装 hardwareConcurrency
-            Object.defineProperty(navigator, 'hardwareConcurrency', {
-                get: () => 8,
-            });
-            
-            // 伪装 deviceMemory
-            Object.defineProperty(navigator, 'deviceMemory', {
-                get: () => 8,
-            });
-            
-            // 伪装 maxTouchPoints
-            Object.defineProperty(navigator, 'maxTouchPoints', {
-                get: () => 0,
-            });
-            
-            // 禁用地理位置API，避免位置权限弹窗
-            if (navigator.geolocation) {
-                navigator.geolocation.getCurrentPosition = function(success, error) {
-                    if (error) error({ code: 1, message: "User denied Geolocation" });
-                };
-                navigator.geolocation.watchPosition = function(success, error) {
-                    if (error) error({ code: 1, message: "User denied Geolocation" });
-                };
-                navigator.geolocation.clearWatch = function() {};
-            }
-            
-            // 伪装 connection
-            if (navigator.connection) {
-                Object.defineProperty(navigator.connection, 'rtt', {
-                    get: () => 50,
-                });
-            }
-            
-            // 覆盖 toString 方法，使其看起来更真实
-            const originalToString = Function.prototype.toString;
-            Function.prototype.toString = function() {
-                if (this === navigator.geolocation.getCurrentPosition) {
-                    return 'function getCurrentPosition() { [native code] }';
-                }
-                if (this === navigator.geolocation.watchPosition) {
-                    return 'function watchPosition() { [native code] }';
-                }
-                return originalToString.call(this);
-            };
-        """)
         
         # 加载 cookies
         await self._load_cookies()

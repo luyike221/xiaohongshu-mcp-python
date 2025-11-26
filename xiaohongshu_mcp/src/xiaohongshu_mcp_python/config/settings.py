@@ -45,6 +45,13 @@ class Settings:
         # 未设置时，根据环境自动决定：生产环境默认无头，开发环境默认有头
         BROWSER_HEADLESS: bool = IS_PRODUCTION
     
+    # 浏览器可执行文件路径（用于使用本地浏览器）
+    # 如果未设置，则使用 Playwright 自带的浏览器
+    # Ubuntu 常见路径：
+    # - Google Chrome: /usr/bin/google-chrome 或 /usr/bin/google-chrome-stable
+    # - Chromium: /usr/bin/chromium 或 /usr/bin/chromium-browser
+    BROWSER_EXECUTABLE_PATH: str | None = os.getenv("BROWSER_EXECUTABLE_PATH", None)
+    
     # 日志配置
     LOG_LEVEL: str = os.getenv("LOG_LEVEL", "DEBUG" if IS_DEVELOPMENT else "INFO")
     LOG_FORMAT: str = os.getenv(
