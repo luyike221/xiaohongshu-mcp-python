@@ -244,9 +244,24 @@ class PublishAction:
         logger.info("选择图文发布标签")
         
         try:
-            # 等待并点击图文发布标签
+            # 步骤1: 先 hover 到按钮容器
+            logger.debug("悬停到按钮容器")
+            btn_element = await self.page.wait_for_selector(
+                '//div[@class="btn"]',
+                timeout=BrowserConfig.ELEMENT_TIMEOUT
+            )
+            
+            if btn_element:
+                await btn_element.hover()
+                await asyncio.sleep(0.3)  # 等待悬停效果
+                logger.debug("已悬停到按钮容器")
+            else:
+                logger.warning("未找到按钮容器，直接尝试点击图文标签")
+            
+            # 步骤2: 点击图文发布标签
+            logger.debug("点击图文发布标签")
             tab_element = await self.page.wait_for_selector(
-                XiaohongshuSelectors.PUBLISH_TAB,
+                '//div[normalize-space(.)="上传图文"][@class="container"]',
                 timeout=BrowserConfig.ELEMENT_TIMEOUT
             )
             
@@ -265,9 +280,24 @@ class PublishAction:
         logger.info("选择视频发布标签")
         
         try:
-            # 等待并点击视频发布标签
+            # 步骤1: 先 hover 到按钮容器
+            logger.debug("悬停到按钮容器")
+            btn_element = await self.page.wait_for_selector(
+                '//div[@class="btn"]',
+                timeout=BrowserConfig.ELEMENT_TIMEOUT
+            )
+            
+            if btn_element:
+                await btn_element.hover()
+                await asyncio.sleep(0.3)  # 等待悬停效果
+                logger.debug("已悬停到按钮容器")
+            else:
+                logger.warning("未找到按钮容器，直接尝试点击视频标签")
+            
+            # 步骤2: 点击视频发布标签
+            logger.debug("点击视频发布标签")
             video_tab = await self.page.wait_for_selector(
-                XiaohongshuSelectors.VIDEO_PUBLISH_TAB,
+                '//div[normalize-space(.)="上传视频"][@class="container"]',
                 timeout=BrowserConfig.ELEMENT_TIMEOUT
             )
             

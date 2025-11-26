@@ -30,86 +30,167 @@ class ImageDownloader:
         self.download_dir.mkdir(parents=True, exist_ok=True)
         
         # HTTP 客户端配置
+        # 为图片下载添加更完整的请求头，特别是针对 Bing 等图片服务
+        download_headers = ApiConfig.DEFAULT_HEADERS.copy()
+        download_headers.update({
+            "Accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
+            "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+            "Referer": "https://www.bing.com/",  # 为 Bing 图片添加 Referer
+            "Sec-Fetch-Dest": "image",
+            "Sec-Fetch-Mode": "no-cors",
+            "Sec-Fetch-Site": "cross-site",
+        })
+        
         self.client = httpx.AsyncClient(
-            headers=ApiConfig.DEFAULT_HEADERS,
-            timeout=ApiConfig.REQUEST_TIMEOUT,
-            follow_redirects=True
+            headers=download_headers,
+            timeout=httpx.Timeout(30.0, connect=10.0),  # 连接超时10秒，总超时30秒
+            follow_redirects=True,
+            limits=httpx.Limits(max_keepalive_connections=10, max_connections=20),
+            verify=True  # SSL 验证
         )
     
-    async def download_image(self, url: str, filename: Optional[str] = None) -> Optional[str]:
+    async def download_image(self, url: str, filename: Optional[str] = None, max_retries: int = 3) -> Optional[str]:
         """
         下载单张图片
         
         Args:
             url: 图片URL
             filename: 保存的文件名，如果不提供则自动生成
+            max_retries: 最大重试次数，默认3次
             
         Returns:
             下载成功返回本地文件路径，失败返回None
         """
-        try:
-            if not self.is_image_url(url):
-                logger.warning(f"不是有效的图片URL: {url}")
-                return None
-            
-            # 如果提供了文件名，先检查文件是否已存在
-            if filename:
-                file_path = self.download_dir / filename
-                if file_path.exists():
-                    logger.info(f"图片已存在，跳过下载: {file_path}")
-                    return str(file_path)
-            
-            # 下载图片（先下载以获取 Content-Type）
-            logger.info(f"开始下载图片: {url}")
-            response = await self.client.get(url)
-            response.raise_for_status()
-            
-            # 获取 Content-Type
-            content_type = response.headers.get("content-type", "")
-            
-            # 验证内容类型（如果 Content-Type 明确不是图片，则警告但不直接返回）
-            content_type_lower = content_type.lower() if content_type else ""
-            if content_type_lower and not content_type_lower.startswith("image/"):
-                # 如果 Content-Type 明确不是图片（如 text/html），则拒绝
-                if content_type_lower.startswith("text/") or content_type_lower.startswith("application/json"):
-                    logger.warning(f"响应内容不是图片: {content_type}")
+        last_error = None
+        for attempt in range(max_retries):
+            try:
+                if not self.is_image_url(url):
+                    logger.warning(f"不是有效的图片URL: {url}")
                     return None
-                # 如果 Content-Type 不明确或为空，继续下载，稍后通过文件内容验证
-            
-            # 生成文件名（使用 Content-Type 来确定扩展名）
-            if not filename:
-                filename = self._generate_filename(url, content_type)
-            
-            file_path = self.download_dir / filename
-            
-            # 再次检查文件是否已存在（可能在下载过程中其他进程创建了）
-            if file_path.exists():
-                logger.info(f"图片已存在，跳过保存: {file_path}")
-                return str(file_path)
-            
-            # 保存文件
-            async with aiofiles.open(file_path, "wb") as f:
-                await f.write(response.content)
-            
-            # 验证下载的文件是否是有效的图片
-            if not self._validate_image_file(str(file_path)):
-                logger.warning(f"下载的文件不是有效的图片: {file_path}")
-                # 删除无效文件
+                
+                # 如果提供了文件名，先检查文件是否已存在
+                if filename:
+                    file_path = self.download_dir / filename
+                    if file_path.exists():
+                        logger.info(f"图片已存在，跳过下载: {file_path}")
+                        return str(file_path)
+                
+                # 下载图片（先下载以获取 Content-Type）
+                if attempt > 0:
+                    logger.info(f"重试下载图片 (第 {attempt + 1} 次): {url}")
+                else:
+                    logger.info(f"开始下载图片: {url}")
+                
                 try:
-                    file_path.unlink()
+                    response = await self.client.get(url)
+                    response.raise_for_status()
+                except httpx.HTTPStatusError as e:
+                    # 记录详细的HTTP状态错误
+                    status_code = e.response.status_code if e.response else "未知"
+                    last_error = f"HTTP状态错误: 状态码={status_code}"
+                    logger.warning(f"下载图片失败 (尝试 {attempt + 1}/{max_retries}) {url}: {last_error}")
+                    if e.response:
+                        try:
+                            response_text = e.response.text[:500]
+                            logger.debug(f"响应内容: {response_text}")
+                        except Exception:
+                            pass
+                    # 如果是4xx错误（客户端错误），不重试
+                    if e.response and 400 <= e.response.status_code < 500:
+                        logger.error(f"客户端错误，不再重试: {url}")
+                        break
+                    # 如果是最后一次尝试，抛出异常
+                    if attempt == max_retries - 1:
+                        raise
+                    # 否则等待后重试
+                    await asyncio.sleep(1 * (attempt + 1))
+                    continue
+                except httpx.RequestError as e:
+                    # 记录请求错误（连接错误、超时等）
+                    last_error = f"请求错误: {type(e).__name__}: {str(e)}"
+                    logger.warning(f"下载图片失败 (尝试 {attempt + 1}/{max_retries}) {url}: {last_error}")
+                    # 如果是最后一次尝试，抛出异常
+                    if attempt == max_retries - 1:
+                        raise
+                    # 否则等待后重试
+                    await asyncio.sleep(1 * (attempt + 1))
+                    continue
+                
+                # 获取 Content-Type
+                content_type = response.headers.get("content-type", "")
+                
+                # 验证内容类型（如果 Content-Type 明确不是图片，则警告但不直接返回）
+                content_type_lower = content_type.lower() if content_type else ""
+                if content_type_lower and not content_type_lower.startswith("image/"):
+                    # 如果 Content-Type 明确不是图片（如 text/html），则拒绝
+                    if content_type_lower.startswith("text/") or content_type_lower.startswith("application/json"):
+                        logger.warning(f"响应内容不是图片: {content_type}")
+                        return None
+                    # 如果 Content-Type 不明确或为空，继续下载，稍后通过文件内容验证
+                
+                # 生成文件名（使用 Content-Type 来确定扩展名）
+                if not filename:
+                    filename = self._generate_filename(url, content_type)
+                
+                file_path = self.download_dir / filename
+                
+                # 再次检查文件是否已存在（可能在下载过程中其他进程创建了）
+                if file_path.exists():
+                    logger.info(f"图片已存在，跳过保存: {file_path}")
+                    return str(file_path)
+                
+                # 保存文件
+                async with aiofiles.open(file_path, "wb") as f:
+                    await f.write(response.content)
+                
+                # 验证下载的文件是否是有效的图片
+                if not self._validate_image_file(str(file_path)):
+                    logger.warning(f"下载的文件不是有效的图片: {file_path}")
+                    # 删除无效文件
+                    try:
+                        file_path.unlink()
+                    except Exception:
+                        pass
+                    return None
+                
+                logger.info(f"图片下载成功: {file_path}")
+                return str(file_path)
+                
+            except httpx.HTTPStatusError as e:
+                # HTTP状态错误（如404, 403等）- 最后一次尝试失败
+                status_code = e.response.status_code if e.response else "未知"
+                error_detail = ""
+                try:
+                    if e.response:
+                        error_detail = f"状态码: {status_code}"
+                        try:
+                            response_text = e.response.text[:200]
+                            if response_text:
+                                error_detail += f", 响应: {response_text}"
+                        except Exception:
+                            pass
                 except Exception:
-                    pass
+                    error_detail = f"状态码: {status_code}"
+                logger.error(f"下载图片HTTP状态错误 {url}: {error_detail}")
                 return None
-            
-            logger.info(f"图片下载成功: {file_path}")
-            return str(file_path)
-            
-        except httpx.HTTPError as e:
-            logger.error(f"下载图片HTTP错误 {url}: {e}")
-            return None
-        except Exception as e:
-            logger.error(f"下载图片失败 {url}: {e}")
-            return None
+            except httpx.RequestError as e:
+                # 其他HTTP错误（如连接超时、网络错误等）- 最后一次尝试失败
+                error_msg = str(e) if str(e) else type(e).__name__
+                logger.error(f"下载图片HTTP错误 {url}: {error_msg}")
+                return None
+            except Exception as e:
+                # 其他未知错误
+                last_error = f"{type(e).__name__}: {str(e)}"
+                logger.error(f"下载图片失败 (尝试 {attempt + 1}/{max_retries}) {url}: {last_error}")
+                if attempt == max_retries - 1:
+                    logger.error(f"下载图片最终失败 {url}: {last_error}")
+                    return None
+                await asyncio.sleep(1 * (attempt + 1))
+        
+        # 所有重试都失败了
+        if last_error:
+            logger.error(f"下载图片失败（已重试 {max_retries} 次）{url}: {last_error}")
+        return None
     
     async def download_images(self, urls: List[str]) -> List[str]:
         """

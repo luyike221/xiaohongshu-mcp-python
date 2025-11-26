@@ -9,6 +9,7 @@ from typing import Optional, Dict, Any
 from pathlib import Path
 
 from playwright.async_api import async_playwright, Browser, BrowserContext, Page
+from playwright_stealth import Stealth
 from loguru import logger
 
 from ..storage.cookie_storage import CookieStorage
@@ -153,6 +154,9 @@ class BrowserManager:
         # 创建页面
         self._page = await self._context.new_page()
         
+        # 应用反检测脚本
+        await self._apply_stealth(self._page)
+        
         logger.info("浏览器启动成功")
     
     async def stop(self, save_cookies: bool = True) -> None:
@@ -200,7 +204,10 @@ class BrowserManager:
         """创建新页面"""
         if self._context is None:
             await self.start()
-        return await self._context.new_page()
+        page = await self._context.new_page()
+        # 应用反检测脚本
+        await self._apply_stealth(page)
+        return page
     
     async def load_cookies(self) -> None:
         """加载 cookies（公共方法）"""
@@ -310,3 +317,17 @@ class BrowserManager:
     async def cleanup(self) -> None:
         """清理浏览器资源（别名方法）"""
         await self.stop()
+    
+    async def _apply_stealth(self, page: Page) -> None:
+        """
+        应用 playwright-stealth 反检测脚本到页面
+        
+        Args:
+            page: Playwright 页面实例
+        """
+        try:
+            stealth = Stealth()
+            await stealth.apply_stealth_async(page)
+            logger.debug("已应用 playwright-stealth 反检测脚本")
+        except Exception as e:
+            logger.warning(f"应用反检测脚本失败: {e}，继续执行")
