@@ -248,3 +248,10 @@ data_*.json.zstd.xz
 
 # doc
 docs/
+
+# Large binary files - 大文件
+*.deb
+*.rpm
+*.dmg
+*.pkg
+google-chrome-stable_current_amd64.deb
