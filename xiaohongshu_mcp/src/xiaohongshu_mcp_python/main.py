@@ -10,6 +10,7 @@
 
 import argparse
 import os
+import sys
 from typing import Optional
 from loguru import logger
 
@@ -124,7 +125,58 @@ def cli_main():
     logger.info("=" * 60)
     
     # 运行 FastMCP 服务器 (HTTP 模式)
-    mcp.run(transport="http", host=host, port=port)
+    # 添加全局异常处理以捕获 ClosedResourceError 和 ExceptionGroup
+    try:
+        mcp.run(transport="http", host=host, port=port)
+    except KeyboardInterrupt:
+        logger.info("收到中断信号，正在关闭服务器...")
+        sys.exit(0)
+    except BaseExceptionGroup as eg:
+        # 处理 ExceptionGroup（Python 3.11+）
+        # 检查是否包含 ClosedResourceError
+        has_closed_error = False
+        for exc in eg.exceptions:
+            error_type = type(exc).__name__
+            error_msg = str(exc).lower()
+            if "ClosedResourceError" in error_type or "closed" in error_msg or "closedresource" in error_msg:
+                has_closed_error = True
+                logger.debug(f"检测到客户端连接关闭: {exc}")
+                break
+        
+        if has_closed_error:
+            logger.info("客户端连接已关闭（这是正常的，当客户端断开连接时会发生）")
+            sys.exit(0)
+        else:
+            logger.error(f"服务器运行出错: {eg}")
+            import traceback
+            logger.error(traceback.format_exc())
+            sys.exit(1)
+    except Exception as e:
+        # 处理普通异常
+        # 检查是否是 ExceptionGroup 的包装异常
+        error_type = type(e).__name__
+        error_msg = str(e).lower()
+        
+        # 检查是否包含 ClosedResourceError
+        if "ClosedResourceError" in error_type or "closed" in error_msg or "closedresource" in error_msg:
+            logger.info("客户端连接已关闭（这是正常的，当客户端断开连接时会发生）")
+            sys.exit(0)
+        # 检查是否是 ExceptionGroup 相关错误
+        elif "ExceptionGroup" in error_type or "unhandled errors in a TaskGroup" in error_msg:
+            # 尝试从异常消息中提取 ClosedResourceError
+            if "closed" in error_msg or "ClosedResourceError" in error_msg:
+                logger.info("客户端连接已关闭（这是正常的，当客户端断开连接时会发生）")
+                sys.exit(0)
+            else:
+                logger.error(f"服务器运行出错 (ExceptionGroup): {e}")
+                import traceback
+                logger.error(traceback.format_exc())
+                sys.exit(1)
+        else:
+            logger.error(f"服务器运行出错: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+            sys.exit(1)
 
 
 def main():

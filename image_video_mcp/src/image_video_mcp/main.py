@@ -8,9 +8,20 @@ from fastmcp import FastMCP
 from loguru import logger
 
 from .clients import WanT2IClient
+from .prompts import register_prompts
+from .resources import register_resources, register_resource_templates
 
 # 创建 MCP 应用实例
 mcp = FastMCP("Image Video MCP")
+
+# 注册所有 Resource 资源（必须先注册，因为 Template 会使用它们）
+register_resources(mcp)
+
+# 注册所有 Resource Template 模板
+register_resource_templates(mcp)
+
+# 注册所有 Prompt 模板
+register_prompts(mcp)
 
 
 @mcp.tool()
