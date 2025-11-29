@@ -56,6 +56,36 @@ class WanT2IConfig(BaseSettings):
     )
 
 
+class GoogleGenAIConfig(BaseSettings):
+    """Google GenAI 配置"""
+
+    model_config = SettingsConfigDict(
+        env_file=str(_env_path),
+        env_file_encoding="utf-8",
+        case_sensitive=False,
+        extra="ignore",
+    )
+
+    # API 配置
+    api_key: str = Field(..., description="Google GenAI API Key")
+    base_url: Optional[str] = Field(
+        default=None,
+        description="自定义 API 端点（可选）",
+    )
+    model: str = Field(
+        default="gemini-3-pro-image-preview",
+        description="模型名称",
+    )
+    temperature: float = Field(
+        default=1.0,
+        description="温度参数",
+    )
+    default_aspect_ratio: str = Field(
+        default="3:4",
+        description="默认宽高比",
+    )
+
+
 class Settings(BaseSettings):
     """全局设置"""
 
@@ -82,6 +112,15 @@ class Settings(BaseSettings):
     )
     wan_t2i__default_n: Optional[int] = Field(default=None, alias="WAN_T2I_DEFAULT_N")
 
+    # Google GenAI 配置
+    google_genai__api_key: Optional[str] = Field(default=None, alias="GOOGLE_GENAI_API_KEY")
+    google_genai__base_url: Optional[str] = Field(default=None, alias="GOOGLE_GENAI_BASE_URL")
+    google_genai__model: Optional[str] = Field(default=None, alias="GOOGLE_GENAI_MODEL")
+    google_genai__temperature: Optional[float] = Field(default=None, alias="GOOGLE_GENAI_TEMPERATURE")
+    google_genai__default_aspect_ratio: Optional[str] = Field(
+        default=None, alias="GOOGLE_GENAI_DEFAULT_ASPECT_RATIO"
+    )
+
     def get_wan_t2i_config(self) -> WanT2IConfig:
         """获取通义万相 T2I 配置"""
         if not self.wan_t2i__api_key:
@@ -96,6 +135,19 @@ class Settings(BaseSettings):
             max_retries=self.wan_t2i__max_retries or 3,
             default_size=self.wan_t2i__default_size or "1280*1280",
             default_n=self.wan_t2i__default_n or 1,
+        )
+
+    def get_google_genai_config(self) -> GoogleGenAIConfig:
+        """获取 Google GenAI 配置"""
+        if not self.google_genai__api_key:
+            raise ValueError("Google GenAI API Key 必须配置（GOOGLE_GENAI_API_KEY）")
+
+        return GoogleGenAIConfig(
+            api_key=self.google_genai__api_key,
+            base_url=self.google_genai__base_url,
+            model=self.google_genai__model or "gemini-3-pro-image-preview",
+            temperature=self.google_genai__temperature or 1.0,
+            default_aspect_ratio=self.google_genai__default_aspect_ratio or "3:4",
         )
 
 
