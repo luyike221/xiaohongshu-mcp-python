@@ -16,7 +16,7 @@
 
 ## ✨ 项目简介
 
-这是一个**完整的AI社交媒体运营解决方案**，由三个强大的项目组成，实现从内容生成、平台操作到AI智能调度的全链路自动化。
+这是一个**完整的AI社交媒体运营解决方案**，由四个强大的项目组成，实现从内容生成、平台操作到AI智能调度的全链路自动化。
 
 ### 🎯 核心价值
 
@@ -31,7 +31,7 @@
 
 ## 🏗️ 项目架构
 
-本仓库包含三个独立但协同工作的项目：
+本仓库包含四个独立但协同工作的项目：
 
 ### 1️⃣ **image_video_mcp** - 图像视频生成 MCP 服务层
 
@@ -45,7 +45,19 @@
 
 **适用场景**：需要AI生成图像或视频内容的场景
 
-### 2️⃣ **xiaohongshu_mcp** - 小红书 MCP 服务层
+### 2️⃣ **xhs-content-generator-mcp** - 小红书内容生成 MCP 服务层
+
+**定位**：内容文案生成引擎，提供AI内容创作能力
+
+- ✍️ **内容生成**：基于主题生成小红书笔记、标题、描述等内容
+- 🎯 **多类型支持**：支持笔记、标题、描述等多种内容类型
+- 🚀 **FastMCP框架**：使用 FastMCP 快速构建 MCP 服务
+- 🔌 **MCP协议实现**：完整支持 Model Context Protocol 规范
+- 🎨 **智能创作**：AI驱动的智能内容创作
+
+**适用场景**：需要AI生成小红书文案和内容的场景
+
+### 3️⃣ **xhs-browser-automation-mcp** - 小红书浏览器自动化 MCP 服务层
 
 **定位**：平台操作引擎，提供小红书平台的具体操作能力
 
@@ -57,7 +69,7 @@
 
 **适用场景**：需要直接操作小红书平台的场景
 
-### 3️⃣ **ai_social_scheduler** - AI 调度核心层
+### 4️⃣ **ai_social_scheduler** - AI 调度核心层
 
 **定位**：上层智能调度系统，AI自主决策和执行运营任务
 
@@ -78,23 +90,23 @@
 │   - 事件监听器                           │
 │   - 任务调度器                           │
 │   - 策略管理器                           │
-└──────┬────────────────────┬──────────────┘
-       │ 通过 MCP 协议调用   │ 通过 MCP 协议调用
-       ↓                    ↓
-┌──────────────────┐  ┌─────────────────────────┐
-│ image_video_mcp  │  │ xiaohongshu_mcp         │
-│ (内容生成服务层)  │  │ (平台操作服务层)         │
-│                  │  │                         │
-│ - 图像生成        │  │ - 小红书内容发布         │
-│ - 视频生成        │  │ - 内容搜索与获取        │
-│                  │  │ - 用户互动管理          │
-│                  │  │ - 账户管理              │
-└──────────────────┘  └──────────┬──────────────┘
-                                  │ 浏览器自动化
-                                  ↓
-                            ┌──────────┐
-                            │  小红书平台 │
-                            └──────────┘
+└───┬──────────┬──────────┬───────────────┘
+    │ MCP协议  │ MCP协议  │ MCP协议
+    ↓          ↓          ↓
+┌──────────────┐ ┌──────────────┐ ┌────────────────────┐
+│xhs-content   │ │image_video_mcp│ │xhs-browser-auto-mcp │
+│generator     │ │(图像视频生成) │ │ (平台操作服务层)    │
+│              │ │              │ │                    │
+│- 内容生成    │ │- 图像生成     │ │- 小红书内容发布    │
+│- 文案创作    │ │- 视频生成     │ │- 内容搜索与获取    │
+│              │ │              │ │- 用户互动管理      │
+└──────────────┘ └──────────────┘ │- 账户管理          │
+                                  └────────┬───────────┘
+                                       │ 浏览器自动化
+                                       ↓
+                                 ┌──────────┐
+                                 │  小红书平台 │
+                                 └──────────┘
 ```
 
 ---
@@ -112,6 +124,7 @@
 
 - **图像生成**：基于提示词AI生成高质量图像
 - **视频生成**：基于提示词AI生成视频内容
+- **文案生成**：AI生成小红书笔记、标题、描述等内容
 - **参数定制**：支持自定义尺寸、种子、负面提示词等
 - **批量生成**：支持批量生成和异步处理
 
@@ -171,9 +184,15 @@
    uv sync
    ```
 
-   **安装小红书 MCP 服务：**
+   **安装小红书内容生成 MCP 服务：**
    ```bash
-   cd xiaohongshu_mcp
+   cd xhs-content-generator-mcp
+   uv sync
+   ```
+
+   **安装小红书浏览器自动化 MCP 服务：**
+   ```bash
+   cd xhs-browser-automation-mcp
    uv sync
    uv run playwright install chromium
    ```
@@ -200,9 +219,19 @@ WANT2I_API_KEY=your_api_key
 WANT2I_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
 ```
 
-#### 小红书 MCP 服务配置
+#### 小红书内容生成 MCP 服务配置
 
-在 `xiaohongshu_mcp` 目录下创建 `.env` 文件：
+在 `xhs-content-generator-mcp` 目录下创建 `.env` 文件（可选）：
+
+```env
+# 服务器配置
+MCP_HOST=0.0.0.0
+MCP_PORT=8001
+```
+
+#### 小红书浏览器自动化 MCP 服务配置
+
+在 `xhs-browser-automation-mcp` 目录下创建 `.env` 文件：
 
 ```env
 # 环境模式: development 或 production
@@ -227,10 +256,28 @@ cp config/config.example.yaml config/config.yaml
 
 ### 🎯 启动服务
 
-#### 启动小红书 MCP 服务
+#### 启动图像视频生成 MCP 服务
 
 ```bash
-cd xiaohongshumcp-python
+cd image_video_mcp
+uv run python -m image_video_mcp.main
+```
+
+服务将在 `http://localhost:8003` 启动。
+
+#### 启动小红书内容生成 MCP 服务
+
+```bash
+cd xhs-content-generator-mcp
+uv run python -m xhs_content_generator_mcp.main
+```
+
+服务将在 `http://localhost:8001` 启动（默认端口 8000，可通过参数指定）。
+
+#### 启动小红书浏览器自动化 MCP 服务
+
+```bash
+cd xhs-browser-automation-mcp
 uv run python -m xiaohongshu_mcp_python.main
 ```
 
@@ -247,9 +294,24 @@ uv run python main.py
 
 ## 📖 使用指南
 
-### 场景一：直接使用小红书 MCP 服务
+### 场景一：使用内容生成服务
 
-如果你只需要直接操作小红书平台，可以使用 `xiaohongshumcp-python`：
+如果你需要生成小红书内容，可以使用 `xhs-content-generator-mcp`：
+
+```python
+# 通过 MCP 客户端调用
+{
+  "tool": "generate_content",
+  "parameters": {
+    "topic": "春日美食",
+    "content_type": "note"
+  }
+}
+```
+
+### 场景二：直接使用小红书浏览器自动化 MCP 服务
+
+如果你只需要直接操作小红书平台，可以使用 `xhs-browser-automation-mcp`：
 
 ```python
 # 通过 MCP 客户端调用
@@ -264,7 +326,7 @@ uv run python main.py
 }
 ```
 
-### 场景二：使用 AI 智能运营
+### 场景三：使用 AI 智能运营
 
 如果你需要AI自主运营，可以使用 `ai_social_scheduler`：
 
@@ -273,20 +335,22 @@ uv run python main.py
 # 例如："帮我写一篇关于美食的小红书"
 # AI 会：
 # 1. 分析美食主题
-# 2. 生成内容计划
-# 3. 调用 xiaohongshumcp-python 发布内容
-# 4. 监控发布结果
-# 5. 根据数据调整策略
+# 2. 调用 xhs-content-generator-mcp 生成内容
+# 3. 调用 image_video_mcp 生成配图
+# 4. 调用 xhs-browser-automation-mcp 发布内容
+# 5. 监控发布结果
+# 6. 根据数据调整策略
 ```
 
-### 场景三：集成使用
+### 场景四：完整集成使用
 
-两个项目可以完美集成：
+所有项目可以完美集成，形成完整的运营闭环：
 
 1. **AI 调度系统**监听事件（用户请求、定时任务等）
 2. **AI 决策引擎**分析需求，生成执行计划
-3. **任务调度器**调用 **MCP 服务**执行具体操作
-4. **数据分析**收集结果，优化策略
+3. **内容生成服务**生成文案和图片
+4. **任务调度器**调用 **MCP 服务**执行具体操作
+5. **数据分析**收集结果，优化策略
 
 ---
 
@@ -313,24 +377,42 @@ uv run python main.py
 
 ```
 .
-├── xiaohongshumcp-python/          # 小红书 MCP 服务
+├── image_video_mcp/                # 图像视频生成 MCP 服务
+│   ├── src/
+│   │   └── image_video_mcp/
+│   │       ├── main.py            # 主程序入口
+│   │       ├── clients/           # 客户端模块
+│   │       ├── prompts/           # Prompt 模板
+│   │       ├── resources/         # Resource 资源
+│   │       └── ...
+│   └── README.md                  # 详细文档
+│
+├── xhs-content-generator-mcp/      # 小红书内容生成 MCP 服务
+│   ├── src/
+│   │   └── xhs_content_generator_mcp/
+│   │       ├── __init__.py
+│   │       └── main.py           # 主程序入口
+│   ├── pyproject.toml
+│   └── README.md                  # 详细文档
+│
+├── xhs-browser-automation-mcp/     # 小红书浏览器自动化 MCP 服务
 │   ├── src/
 │   │   └── xiaohongshu_mcp_python/
-│   │       ├── main.py             # 主程序入口
-│   │       ├── server/             # MCP 服务器
-│   │       ├── xiaohongshu/        # 小红书操作模块
+│   │       ├── main.py            # 主程序入口
+│   │       ├── server/            # MCP 服务器
+│   │       ├── xiaohongshu/       # 小红书操作模块
 │   │       └── ...
-│   ├── tests/                      # 测试文件
-│   └── README.md                   # 详细文档
+│   ├── tests/                     # 测试文件
+│   └── README.md                  # 详细文档
 │
 ├── ai_social_scheduler/            # AI 调度系统
 │   ├── src/
 │   │   └── ai_social_scheduler/
-│   │       ├── core/               # AI调度核心层
-│   │       │   ├── ai_engine.py   # AI决策引擎
+│   │       ├── core/              # AI调度核心层
+│   │       │   ├── ai_engine.py  # AI决策引擎
 │   │       │   ├── event_listener.py # 事件监听器
 │   │       │   └── ...
-│   │       ├── mcp/                # MCP服务层
+│   │       ├── mcp/               # MCP服务层
 │   │       └── ...
 │   ├── config/                     # 配置文件
 │   └── README.md                   # 详细文档
@@ -349,9 +431,17 @@ uv run python main.py
 ```json
 {
   "mcpServers": {
-    "xiaohongshu-mcp-python": {
-      "url": "http://localhost:8000/mcp",
-      "description": "小红书 Python MCP 服务"
+    "image-video-mcp": {
+      "url": "http://localhost:8003",
+      "description": "图像视频生成 MCP 服务"
+    },
+    "xhs-content-generator-mcp": {
+      "url": "http://localhost:8001",
+      "description": "小红书内容生成 MCP 服务"
+    },
+    "xhs-browser-automation-mcp": {
+      "url": "http://localhost:8000",
+      "description": "小红书浏览器自动化 MCP 服务"
     }
   }
 }
@@ -364,8 +454,14 @@ uv run python main.py
 ```json
 {
   "mcpServers": {
-    "xiaohongshu-mcp-python": {
-      "url": "http://localhost:8000/mcp"
+    "image-video-mcp": {
+      "url": "http://localhost:8003"
+    },
+    "xhs-content-generator-mcp": {
+      "url": "http://localhost:8001"
+    },
+    "xhs-browser-automation-mcp": {
+      "url": "http://localhost:8000"
     }
   }
 }
@@ -388,8 +484,9 @@ uv run python main.py
 #    - 图片需求：需要3张图片
 #    - 标签：美食、家常菜、生活
 # 3. 任务调度器调用 MCP 服务：
-#    - 生成图片（调用 ComfyUI 服务）
-#    - 发布内容（调用小红书 MCP 服务）
+#    - 生成内容（调用 xhs-content-generator-mcp）
+#    - 生成图片（调用 image_video_mcp）
+#    - 发布内容（调用 xhs-browser-automation-mcp）
 # 4. 监控发布结果
 # 5. 根据数据调整后续策略
 ```
