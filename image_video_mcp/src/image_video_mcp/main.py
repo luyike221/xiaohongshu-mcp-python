@@ -299,7 +299,6 @@ async def generate_images_batch(
         max_wait_time: 最大等待时间（秒），可选参数，默认 600 秒（10分钟）。
             仅在使用通义万相 WanT2I 时有效。由于 WanT2I 是异步任务，
             需要轮询任务状态，此参数控制最大等待时间。
-    
     Returns:
         包含生成结果的字典：
         - success (bool): 是否全部成功生成
@@ -330,7 +329,57 @@ async def generate_images_batch(
     """
     try:
         import base64
+        import uuid
+        from pathlib import Path
+        use_mock = True
+        # Mock 模式：直接返回固定的图片文件
+        if use_mock:
+            logger.info(f"[MOCK模式] 使用 mock 数据，返回固定图片文件")
+            mock_image_path = Path("/root/project/ai_project/yx_运营/xhs_小红书运营/docs/image.png")
+            
+            if not mock_image_path.exists():
+                logger.error(f"[MOCK模式] Mock 图片文件不存在: {mock_image_path}")
+                return {
+                    "success": False,
+                    "error": f"Mock 图片文件不存在: {mock_image_path}",
+                    "message": "Mock 模式失败"
+                }
+            
+            # 生成任务ID
+            task_id = f"mock_{uuid.uuid4().hex[:8]}"
+            
+            # 为每个页面生成 mock 结果
+            generated_images = []
+            for page in pages:
+                page_index = page.get("index", 0)
+                page_type = page.get("type", "content")
+                
+                # 直接返回绝对路径（Linux 下 file:// 格式无法被正确识别）
+                image_url = str(mock_image_path.absolute())
+                
+                generated_images.append({
+                    "index": page_index,
+                    "url": image_url,
+                    "type": page_type
+                })
+            
+            # 按index排序
+            generated_images.sort(key=lambda x: x.get("index", 0))
+            
+            result = {
+                "success": True,
+                "task_id": task_id,
+                "total": len(pages),
+                "completed": len(generated_images),
+                "failed": 0,
+                "images": generated_images,
+                "failed_pages": []
+            }
+            
+            logger.info(f"[MOCK模式] 批量图片生成完成: task_id={task_id}, 成功={result['completed']}, 失败={result['failed']}")
+            return result
 
+        # 正常模式：调用实际的图片生成服务
         # 解析用户上传的参考图片
         user_images = None
         if user_images_base64:

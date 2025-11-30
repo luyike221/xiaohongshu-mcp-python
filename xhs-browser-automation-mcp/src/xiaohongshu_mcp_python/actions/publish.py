@@ -436,13 +436,59 @@ class PublishAction:
             if not upload_input:
                 raise Exception("找不到图片上传输入框")
             
-            # 设置文件
-            await upload_input.set_input_files(image_paths)
+            # 尝试批量上传所有图片
+            try:
+                logger.info(f"尝试批量上传 {len(image_paths)} 张图片")
+                await upload_input.set_input_files(image_paths)
+                logger.info("批量上传成功，等待所有图片上传完成")
+            except Exception as e:
+                # 如果批量上传失败，尝试逐个上传
+                error_msg = str(e)
+                if "Non-multiple" in error_msg or "single file" in error_msg.lower():
+                    logger.warning(f"输入框不支持批量上传，改为逐个上传: {error_msg}")
+                    # 逐个上传
+                    for index, image_path in enumerate(image_paths, 1):
+                        logger.info(f"上传第 {index}/{len(image_paths)} 张图片: {image_path}")
+                        
+                        # 每次上传前重新查找上传输入框（因为上传后DOM可能会变化）
+                        upload_input = await self.page.wait_for_selector(
+                            XiaohongshuSelectors.UPLOAD_INPUT,
+                            timeout=BrowserConfig.ELEMENT_TIMEOUT
+                        )
+                        
+                        if not upload_input:
+                            raise Exception(f"找不到图片上传输入框（第 {index} 张）")
+                        
+                        # 逐个上传
+                        await upload_input.set_input_files([image_path])
+                        
+                        # 等待当前图片上传完成（检查已上传的图片数量）
+                        await asyncio.sleep(1)  # 给一点时间让上传开始
+                        
+                        # 等待上传进度更新
+                        max_wait = 10  # 最多等待10秒
+                        waited = 0
+                        while waited < max_wait:
+                            uploaded_count = len(await self.page.query_selector_all(
+                                XiaohongshuSelectors.UPLOADED_IMAGE
+                            ))
+                            if uploaded_count >= index:
+                                logger.info(f"第 {index} 张图片上传完成")
+                                break
+                            await asyncio.sleep(0.5)
+                            waited += 0.5
+                        
+                        # 如果不是最后一张，等待一小段时间再上传下一张
+                        if index < len(image_paths):
+                            await asyncio.sleep(0.5)
+                else:
+                    # 其他错误，直接抛出
+                    raise
             
-            # 等待上传完成
+            # 等待所有图片上传完成
             await self._wait_for_upload_complete(len(image_paths))
             
-            logger.info("图片上传完成")
+            logger.info("所有图片上传完成")
             
         except PlaywrightTimeoutError:
             raise Exception("等待图片上传输入框超时")
@@ -917,12 +963,14 @@ class PublishAction:
     
     async def _input_content(self, content: str):
         """
-        输入正文内容
+        输入正文内容（模拟手动输入，包括处理换行符）
         
         Args:
             content: 正文内容
         """
-        logger.info("输入正文内容")
+        import random
+        
+        logger.info(f"输入正文内容（模拟手动输入），长度: {len(content)} 字符")
         
         editor = await self._find_content_editor()
         if not editor:
@@ -930,19 +978,63 @@ class PublishAction:
         
         try:
             await editor.click()
-            await asyncio.sleep(0.2)
+            await asyncio.sleep(0.3)
             
             # 检查元素是否可编辑
             is_contenteditable = await editor.get_attribute("contenteditable")
             if is_contenteditable == "true":
-                # 对于 contenteditable 元素，使用 innerHTML 或 textContent
-                await editor.evaluate(f"(el) => el.textContent = ''")
-                await editor.type(content, delay=50)
+                # 对于 contenteditable 元素，清空内容
+                await editor.evaluate("(el) => { el.textContent = ''; el.innerHTML = ''; }")
+                await asyncio.sleep(0.2)
             else:
-                # 对于 input/textarea，使用 fill
-                await editor.fill(content)
+                # 对于 input/textarea，清空内容
+                await editor.fill("")
+                await asyncio.sleep(0.2)
+            
+            # 模拟手动输入：逐字符输入，处理换行符
+            logger.info("开始模拟手动输入...")
+            
+            # 将内容按换行符分割，然后逐段输入
+            lines = content.split('\n')
+            total_lines = len(lines)
+            
+            for line_idx, line in enumerate(lines):
+                if line:  # 如果行不为空，逐字符输入
+                    # 逐字符输入，模拟真实打字速度
+                    for char in line:
+                        await self.page.keyboard.type(char, delay=random.randint(30, 80))
+                        # 偶尔添加更长的延迟，模拟思考停顿
+                        if random.random() < 0.05:  # 5% 的概率
+                            await asyncio.sleep(random.uniform(0.1, 0.3))
+                
+                # 如果不是最后一行，按 Enter 键换行
+                if line_idx < total_lines - 1:
+                    await asyncio.sleep(random.uniform(0.1, 0.2))  # 换行前短暂停顿
+                    await self.page.keyboard.press("Enter")
+                    await asyncio.sleep(random.uniform(0.1, 0.2))  # 换行后短暂停顿
+            
+            # 等待输入完成
+            await asyncio.sleep(0.3)
+            
+            # 验证内容是否已输入
+            if is_contenteditable == "true":
+                actual_content = await editor.text_content()
+            else:
+                actual_content = await editor.input_value()
+            
+            if actual_content and len(actual_content.strip()) > 0:
+                logger.info(f"模拟手动输入完成，实际输入长度: {len(actual_content)} 字符")
+            else:
+                logger.warning("输入后验证内容为空，但继续执行")
+            
+            # 再次点击确保焦点
+            await editor.click()
+            await asyncio.sleep(0.2)
             
             logger.info("正文内容输入完成")
+        except PlaywrightTimeoutError as e:
+            logger.error(f"输入正文内容超时: {e}")
+            raise Exception(f"输入正文内容失败: 超时 - {str(e)}")
         except Exception as e:
             logger.error(f"输入正文内容失败: {e}")
             raise Exception(f"输入正文内容失败: {e}")
@@ -1218,10 +1310,43 @@ class PublishAction:
                     if error_element:
                         error_text = await error_element.text_content()
                         if error_text and len(error_text.strip()) > 0:
+                            error_text_lower = error_text.lower()
+                            
+                            # 检查是否是正常的上传状态提示（不是错误）
+                            is_uploading_status = (
+                                "图片上传中" in error_text or
+                                "上传中" in error_text or
+                                "请稍后" in error_text or
+                                "正在上传" in error_text or
+                                "处理中" in error_text
+                            )
+                            
+                            if is_uploading_status:
+                                # 这是正常的上传状态，继续等待
+                                if current_time - last_log_time >= 5.0:
+                                    logger.info(f"检测到上传状态提示: {error_text}，继续等待...")
+                                continue
+                            
+                            # 检测内容字符数限制相关的错误（如 "1232 /1000"）
+                            is_char_limit_error = (
+                                "/1000" in error_text or 
+                                ("字符" in error_text and "1000" in error_text) or
+                                ("字数" in error_text and "1000" in error_text) or
+                                (error_text.strip().replace(" ", "").replace("/", "").isdigit() and "/1000" in error_text)
+                            )
+                            if is_char_limit_error:
+                                # 抛出明确的错误信息
+                                error_msg = (
+                                    f"内容字符数超过平台限制！"
+                                    f"错误信息: {error_text}。"
+                                    f"小红书平台限制内容最多1000字符，请缩短内容后重试。"
+                                )
+                                logger.error(error_msg)
+                                raise Exception(error_msg)
                             logger.error(f"检测到错误信息: {error_text}")
                             raise Exception(f"发布失败: {error_text}")
                 except Exception as e:
-                    if "发布失败" in str(e):
+                    if "发布失败" in str(e) or "内容字符数超过平台限制" in str(e):
                         raise
             
             # 4. 检查发布按钮是否还存在（如果不存在，可能在发布中）

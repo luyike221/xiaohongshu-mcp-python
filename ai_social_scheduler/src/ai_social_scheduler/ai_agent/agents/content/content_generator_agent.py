@@ -10,6 +10,7 @@ from langchain.agents import create_agent
 from ...client import QwenClient
 from ...tools.logging import get_logger
 from ..base import BaseAgent
+from ..mcp.xhs.xhs_content_generator_service import XHSContentGeneratorService
 
 logger = get_logger(__name__)
 langchain_logger = logging.getLogger("langchain")
@@ -48,6 +49,7 @@ class ContentGeneratorAgent(BaseAgent):
         # 延迟初始化的组件
         self._llm_client: Optional[QwenClient] = None
         self._agent = None
+        self._content_generator_service: Optional[XHSContentGeneratorService] = None
         self._initialized = False
     
     async def _initialize(self):
@@ -272,11 +274,72 @@ class ContentGeneratorAgent(BaseAgent):
             materials = state.get("materials", {})
             context = state.get("context", {})
             request = state.get("request", "")
+            topic = strategy.get("topic", "")
             
-            # 准备执行参数
+            # 优先使用 generate_outline MCP 工具生成内容
+            if topic:
+                try:
+                    # 初始化内容生成服务
+                    if not self._content_generator_service:
+                        self._content_generator_service = XHSContentGeneratorService()
+                        await self._content_generator_service._initialize()
+                    
+                    self.logger.info(
+                        "Using generate_outline MCP tool to generate content",
+                        topic=topic
+                    )
+                    
+                    # 调用 generate_outline 生成大纲
+                    outline_result = await self._content_generator_service.generate_outline(
+                        topic=topic,
+                        provider_type=context.get("provider_type", "alibaba_bailian"),
+                        temperature=context.get("temperature", 0.3),
+                        max_output_tokens=context.get("max_output_tokens", 8000),
+                    )
+                    
+                    if outline_result.get("success", False):
+                        # 使用从大纲中提取的 title、content、tags
+                        title = outline_result.get("title", topic)
+                        content = outline_result.get("content", "")
+                        tags = outline_result.get("tags", [])
+                        
+                        # 如果没有提取到标签，使用策略中的关键词作为标签
+                        if not tags:
+                            tags = strategy.get("keywords", [])
+                        
+                        self.logger.info(
+                            "Content generated successfully via generate_outline",
+                            title=title[:30] if title else "",
+                            content_length=len(content),
+                            tags_count=len(tags)
+                        )
+                        
+                        return {
+                            "agent": self.name,
+                            "title": title,
+                            "content": content,
+                            "tags": tags,
+                            "success": True,
+                            "outline": outline_result.get("outline", ""),
+                            "pages": outline_result.get("pages", [])
+                        }
+                    else:
+                        self.logger.warning(
+                            "generate_outline failed, falling back to LLM generation",
+                            error=outline_result.get("error", "Unknown error")
+                        )
+                        # 如果 generate_outline 失败，回退到原来的 LLM 生成方式
+                except Exception as e:
+                    self.logger.warning(
+                        "Failed to use generate_outline, falling back to LLM generation",
+                        error=str(e)
+                    )
+                    # 如果调用失败，回退到原来的 LLM 生成方式
+            
+            # 回退方案：使用原来的 LLM 生成方式
             exec_params = {
                 "strategy": strategy,
-                "topic": strategy.get("topic", ""),
+                "topic": topic,
                 "keywords": strategy.get("keywords", []),
                 "template": strategy.get("template", ""),
                 "materials": materials,

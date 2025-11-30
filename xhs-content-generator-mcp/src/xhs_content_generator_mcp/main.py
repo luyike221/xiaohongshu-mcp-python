@@ -47,6 +47,9 @@ async def generate_outline(
         - pages: 解析后的页面列表，每个页面包含 index、type、content
         - has_images: 是否使用了参考图片
         - image_analysis_used: 是否使用了 VL 模型分析图片
+        - title: 提取的标题（匹配发布接口）
+        - content: 提取的正文内容（匹配发布接口，不包含标题和标签）
+        - tags: 提取的标签列表（匹配发布接口）
         - error: 错误信息（如果失败）
     """
     try:

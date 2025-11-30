@@ -10,13 +10,18 @@ from ..clients import WanT2IClient
 class ImageGenerationService:
     """批量图片生成服务"""
 
-    def __init__(self):
+    def __init__(self, max_concurrent: int = 10):
         """
         初始化服务
         
+        Args:
+            max_concurrent: 最大并发数，默认10个线程
+        
         注意：图片不再保存到本地，直接返回模型提供的 URL
         """
-        logger.info("图片生成服务初始化（使用 URL 模式，不保存本地文件）")
+        self.max_concurrent = max_concurrent
+        self.semaphore = asyncio.Semaphore(max_concurrent)
+        logger.info(f"图片生成服务初始化（使用 URL 模式，不保存本地文件，最大并发数: {max_concurrent}）")
 
     def _get_prompt_from_template(
         self,
@@ -123,6 +128,94 @@ class ImageGenerationService:
 
 请根据以上要求，生成一张精美的小红书风格图片。请直接给出图片，不要有任何手机边框，或者是白色留边。"""
 
+    async def _generate_single_image(
+        self,
+        client: WanT2IClient,
+        page: Dict[str, Any],
+        full_outline: str,
+        user_topic: str,
+        max_wait_time: int,
+    ) -> Dict[str, Any]:
+        """
+        生成单张图片（内部方法，使用信号量控制并发）
+        
+        Args:
+            client: WanT2I 客户端
+            page: 页面信息
+            full_outline: 完整大纲
+            user_topic: 用户主题
+            max_wait_time: 最大等待时间
+            
+        Returns:
+            包含生成结果的字典，成功时包含 index, url, type，失败时包含 index, error
+        """
+        index = page.get("index", 0)
+        page_type = page.get("type", "content")
+        
+        async with self.semaphore:  # 使用信号量控制并发数
+            logger.info(f"开始生成图片: index={index}, type={page_type}")
+            try:
+                prompt = self._get_prompt_from_template(
+                    page_content=page.get("content", ""),
+                    page_type=page_type,
+                    full_outline=full_outline,
+                    user_topic=user_topic
+                )
+
+                # 生成图片（使用 WanT2I）
+                result = await client.generate_image(
+                    prompt=prompt,
+                    size="1024*1365",
+                    seed=None,
+                )
+                
+                # 轮询获取结果
+                output = result.get('output', {})
+                task_id_img = output.get('task_id')
+                task_status = output.get('task_status', 'PENDING')
+                
+                if task_status in ['PENDING', 'RUNNING']:
+                    max_polls = max_wait_time // 10
+                    poll_count = 0
+                    
+                    while poll_count < max_polls:
+                        await asyncio.sleep(10)
+                        poll_count += 1
+                        
+                        status_result = await client.get_task_status(task_id_img)
+                        status_output = status_result.get('output', {})
+                        current_status = status_output.get('task_status', 'UNKNOWN')
+                        
+                        if current_status == 'SUCCEEDED':
+                            results = status_output.get('results', [])
+                            if results and results[0].get('url'):
+                                image_url = results[0]['url']
+                                break
+                        elif current_status == 'FAILED':
+                            raise Exception(f"图片生成失败: {status_output.get('message', '未知错误')}")
+                elif task_status == 'SUCCEEDED':
+                    results = output.get('results', [])
+                    if results and results[0].get('url'):
+                        image_url = results[0]['url']
+                    else:
+                        raise Exception("未获取到图片 URL")
+                else:
+                    raise Exception(f"任务状态异常: {task_status}")
+
+                logger.info(f"✅ 页面 [{index}] 生成成功: url={image_url[:50]}...")
+                return {
+                    "index": index,
+                    "url": image_url,
+                    "type": page_type
+                }
+
+            except Exception as e:
+                logger.error(f"❌ 页面 [{index}] 生成失败: {e}")
+                return {
+                    "index": index,
+                    "error": str(e)
+                }
+
     async def generate_images(
         self,
         pages: List[Dict[str, Any]],
@@ -174,144 +267,46 @@ class ImageGenerationService:
         failed_pages = []
         cover_image_url = None
 
-        # 第一阶段：生成封面
+        # 准备所有需要生成的页面（封面优先，其他页面并行）
+        all_pages_to_generate = []
         if cover_page:
-            logger.info(f"生成封面: index={cover_page.get('index')}")
-            try:
-                prompt = self._get_prompt_from_template(
-                    page_content=cover_page.get("content", ""),
-                    page_type=cover_page.get("type", "cover"),
-                    full_outline=full_outline,
-                    user_topic=user_topic
-                )
+            all_pages_to_generate.append(cover_page)
+        all_pages_to_generate.extend(other_pages)
 
-                # 生成封面（使用 WanT2I）
-                # 计算 3:4 比例的尺寸（小红书标准）
-                # 总像素在 768*768 到 1440*1440 之间，选择 1024*1365 (约 3:4)
-                result = await client.generate_image(
-                    prompt=prompt,
-                    size="1024*1365",
-                    seed=None,
-                )
-                # 轮询获取结果
-                output = result.get('output', {})
-                task_id_img = output.get('task_id')
-                task_status = output.get('task_status', 'PENDING')
-                
-                if task_status in ['PENDING', 'RUNNING']:
-                    max_polls = max_wait_time // 10
-                    poll_count = 0
-                    
-                    while poll_count < max_polls:
-                        await asyncio.sleep(10)
-                        poll_count += 1
-                        
-                        status_result = await client.get_task_status(task_id_img)
-                        status_output = status_result.get('output', {})
-                        current_status = status_output.get('task_status', 'UNKNOWN')
-                        
-                        if current_status == 'SUCCEEDED':
-                            results = status_output.get('results', [])
-                            if results and results[0].get('url'):
-                                image_url = results[0]['url']
-                                break
-                        elif current_status == 'FAILED':
-                            raise Exception(f"图片生成失败: {status_output.get('message', '未知错误')}")
-                elif task_status == 'SUCCEEDED':
-                    results = output.get('results', [])
-                    if results and results[0].get('url'):
-                        image_url = results[0]['url']
-                    else:
-                        raise Exception("未获取到图片 URL")
-                else:
-                    raise Exception(f"任务状态异常: {task_status}")
-
-                # 保存封面 URL
-                index = cover_page.get("index", 0)
-                generated_images.append({
-                    "index": index,
-                    "url": image_url,
-                    "type": "cover"
-                })
-
-                # 保存封面 URL 作为后续页面的参考（虽然 WanT2I 不支持参考图片，但保留变量以备将来使用）
-                cover_image_url = image_url
-                logger.info(f"✅ 封面生成成功: index={index}, url={image_url[:50]}...")
-
-            except Exception as e:
-                logger.error(f"❌ 封面生成失败: {e}")
-                failed_pages.append({
-                    "index": cover_page.get("index", 0),
-                    "error": str(e)
-                })
-
-        # 第二阶段：生成其他页面
-        for page in other_pages:
-            index = page.get("index", 0)
-            logger.info(f"生成页面: index={index}, type={page.get('type')}")
-
-            try:
-                prompt = self._get_prompt_from_template(
-                    page_content=page.get("content", ""),
-                    page_type=page.get("type", "content"),
-                    full_outline=full_outline,
-                    user_topic=user_topic
-                )
-
-                # 生成其他页面（WanT2I）
-                result = await client.generate_image(
-                    prompt=prompt,
-                    size="1024*1365",
-                    seed=None,
-                )
-                # 轮询获取结果
-                output = result.get('output', {})
-                task_id_img = output.get('task_id')
-                task_status = output.get('task_status', 'PENDING')
-                
-                if task_status in ['PENDING', 'RUNNING']:
-                    max_polls = max_wait_time // 10
-                    poll_count = 0
-                    
-                    while poll_count < max_polls:
-                        await asyncio.sleep(10)
-                        poll_count += 1
-                        
-                        status_result = await client.get_task_status(task_id_img)
-                        status_output = status_result.get('output', {})
-                        current_status = status_output.get('task_status', 'UNKNOWN')
-                        
-                        if current_status == 'SUCCEEDED':
-                            results = status_output.get('results', [])
-                            if results and results[0].get('url'):
-                                image_url = results[0]['url']
-                                break
-                        elif current_status == 'FAILED':
-                            raise Exception(f"图片生成失败: {status_output.get('message', '未知错误')}")
-                elif task_status == 'SUCCEEDED':
-                    results = output.get('results', [])
-                    if results and results[0].get('url'):
-                        image_url = results[0]['url']
-                    else:
-                        raise Exception("未获取到图片 URL")
-                else:
-                    raise Exception(f"任务状态异常: {task_status}")
-
-                # 保存图片 URL
-                generated_images.append({
-                    "index": index,
-                    "url": image_url,
-                    "type": page.get("type", "content")
-                })
-
-                logger.info(f"✅ 页面 [{index}] 生成成功: url={image_url[:50]}...")
-
-            except Exception as e:
-                logger.error(f"❌ 页面 [{index}] 生成失败: {e}")
-                failed_pages.append({
-                    "index": index,
-                    "error": str(e)
-                })
+        # 使用线程池并行生成所有图片（使用 asyncio.gather）
+        logger.info(f"开始并行生成 {len(all_pages_to_generate)} 张图片（最大并发数: {self.max_concurrent}）")
+        
+        # 创建所有生成任务
+        tasks = [
+            self._generate_single_image(
+                client=client,
+                page=page,
+                full_outline=full_outline,
+                user_topic=user_topic,
+                max_wait_time=max_wait_time,
+            )
+            for page in all_pages_to_generate
+        ]
+        
+        # 并行执行所有任务
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        
+        # 处理结果
+        for result in results:
+            if isinstance(result, Exception):
+                logger.error(f"生成任务异常: {result}")
+                continue
+            
+            if "error" in result:
+                failed_pages.append(result)
+            else:
+                generated_images.append(result)
+                # 如果是封面，保存封面URL
+                if result.get("type") == "cover":
+                    cover_image_url = result.get("url")
+        
+        # 按index排序生成结果
+        generated_images.sort(key=lambda x: x.get("index", 0))
 
         # 返回结果
         result = {

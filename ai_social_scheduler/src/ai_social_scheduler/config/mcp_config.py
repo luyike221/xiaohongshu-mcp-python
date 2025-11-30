@@ -29,6 +29,10 @@ class MCPConfig(BaseSettings):
     image_video_mcp_url: str = "http://127.0.0.1:8003/mcp"
     image_video_mcp_transport: str = "streamable_http"  # streamable_http 或 stdio
 
+    # 小红书内容生成MCP服务配置
+    xhs_content_generator_mcp_url: str = "http://127.0.0.1:8004/mcp"
+    xhs_content_generator_mcp_transport: str = "streamable_http"  # streamable_http 或 stdio
+
 
 # 全局MCP配置实例
 mcp_config = MCPConfig()

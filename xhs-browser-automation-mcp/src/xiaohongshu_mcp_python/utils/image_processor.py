@@ -44,7 +44,17 @@ class ImageProcessor:
         local_paths = []
         
         for path in image_paths:
-            if self.downloader.is_image_url(path):
+            # 处理 file:// URL 格式，转换为本地路径
+            if path.startswith('file://'):
+                # 移除 file:// 前缀，保留路径部分
+                # file:///path/to/file -> /path/to/file
+                # file://C:/path/to/file -> C:/path/to/file (Windows)
+                local_path = path[7:]  # 移除 'file://' 前缀
+                # 对于 Linux/Mac，file:// 后面可能有三个斜杠，需要处理
+                if local_path.startswith('//'):
+                    local_path = local_path[1:]  # 移除多余的斜杠
+                local_paths.append(local_path)
+            elif self.downloader.is_image_url(path):
                 urls.append(path)
             else:
                 local_paths.append(path)
