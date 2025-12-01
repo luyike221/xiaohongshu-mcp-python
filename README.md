@@ -29,6 +29,22 @@
 
 ---
 
+## 📖 使用指南
+
+### 场景一：生成内容、图片、并发布于小红书
+
+```
+[新对话] 请输入消息: 写个单身程序员如何找富婆的小红书，配9张图，其中有核心图有类似狂飙中大嫂陈舒婷
+📤 发送中...
+📥 最终生成的小红书
+```
+
+**生成的小红书图片示例：**
+
+![富婆圣经0](assets/富婆圣经0.png)
+
+![富婆圣经1](assets/富婆圣经1.png)
+
 ## 🏗️ 项目架构
 
 本仓库包含四个独立但协同工作的项目：
@@ -42,6 +58,12 @@
 - 📊 **策略优化**：基于数据分析自动调整内容策略
 - 🎨 **内容创作**：AI生成内容创作计划，调用底层服务执行
 - 📈 **数据分析**：内容表现分析、趋势识别、热点追踪
+- 🌐 **HTTP API 服务**：提供 FastAPI 接口，支持 HTTP 调用
+- 💬 **交互式聊天**：提供命令行聊天客户端，方便快速体验
+
+**核心文件**：
+- **`run.py`**：启动 FastAPI 服务器，提供 HTTP API 接口（默认端口 8012）
+- **`chat.py`**：交互式聊天客户端，通过命令行与 AI Agent 对话
 
 **适用场景**：需要AI智能运营和自动化调度的场景
 
@@ -285,6 +307,34 @@ uv run python -m xiaohongshu_mcp_python.main
 
 #### 启动 AI 调度系统
 
+**方式一：启动 HTTP API 服务（推荐）**
+
+使用 `run.py` 启动 FastAPI 服务器，提供 HTTP 接口：
+
+```bash
+cd ai_social_scheduler
+uv run python run.py
+```
+
+服务将在 `http://0.0.0.0:8012` 启动，提供以下接口：
+- `POST /api/v1/chat` - 聊天接口，发送消息获取 AI 回复
+
+**方式二：使用交互式聊天客户端**
+
+使用 `chat.py` 启动交互式命令行客户端：
+
+```bash
+cd ai_social_scheduler
+uv run python chat.py
+```
+
+启动后可以：
+- 直接输入消息与 AI Agent 对话
+- 输入 `quit` 或 `exit` 退出
+- 输入 `reset` 重置对话线程
+
+**方式三：直接运行主程序**
+
 ```bash
 cd ai_social_scheduler
 uv run python main.py
@@ -330,17 +380,44 @@ uv run python main.py
 
 如果你需要AI自主运营，可以使用 `ai_social_scheduler`：
 
-```python
-# AI 会自动分析你的需求，生成内容计划，并调用底层服务执行
-# 例如："帮我写一篇关于美食的小红书"
-# AI 会：
-# 1. 分析美食主题
-# 2. 调用 xhs-content-generator-mcp 生成内容
-# 3. 调用 image_video_mcp 生成配图
-# 4. 调用 xhs-browser-automation-mcp 发布内容
-# 5. 监控发布结果
-# 6. 根据数据调整策略
+**方式一：使用交互式聊天客户端（最简单）**
+
+```bash
+cd ai_social_scheduler
+uv run python chat.py
 ```
+
+启动后直接与 AI 对话：
+```
+[新对话] 请输入消息: 帮我写一篇关于美食的小红书
+📤 发送中...
+📥 AI 回复:
+好的，我来帮你创建一篇关于美食的小红书内容...
+```
+
+**方式二：通过 HTTP API 调用**
+
+1. 启动 API 服务：
+```bash
+cd ai_social_scheduler
+uv run python run.py
+```
+
+2. 发送 HTTP 请求：
+```bash
+curl -X POST http://localhost:8012/api/v1/chat \
+  -H "Content-Type: application/json" \
+  -d '{"message": "帮我写一篇关于美食的小红书"}'
+```
+
+**AI 处理流程**：
+当你说"帮我写一篇关于美食的小红书"时，AI 会：
+1. 分析美食主题和需求
+2. 调用 `xhs-content-generator-mcp` 生成内容文案
+3. 调用 `image_video_mcp` 生成配图
+4. 调用 `xhs-browser-automation-mcp` 发布内容
+5. 监控发布结果
+6. 根据数据调整后续策略
 
 ### 场景四：完整集成使用
 
@@ -412,8 +489,13 @@ uv run python main.py
 │   │       │   ├── ai_engine.py  # AI决策引擎
 │   │       │   ├── event_listener.py # 事件监听器
 │   │       │   └── ...
+│   │       ├── api/               # FastAPI 接口层
+│   │       │   ├── app.py        # FastAPI 应用
+│   │       │   └── ...
 │   │       ├── mcp/               # MCP服务层
 │   │       └── ...
+│   ├── run.py                      # 启动 FastAPI 服务器
+│   ├── chat.py                     # 交互式聊天客户端
 │   ├── config/                     # 配置文件
 │   └── README.md                   # 详细文档
 │
@@ -502,6 +584,80 @@ uv run python main.py
 # 3. 生成合适的内容
 # 4. 自动发布
 # 5. 收集数据并优化策略
+```
+
+### 交互式聊天使用示例
+
+使用 `chat.py` 与 AI Agent 进行对话：
+
+```bash
+$ cd ai_social_scheduler
+$ uv run python chat.py
+
+============================================================
+小红书运营 Agent 交互式聊天
+============================================================
+
+提示:
+  - 输入消息后按 Enter 发送
+  - 输入 'quit' 或 'exit' 退出
+  - 输入 'reset' 重置对话
+
+[新对话] 请输入消息: 帮我写一篇关于春日美食的小红书
+
+📤 发送中...
+
+📥 AI 回复:
+好的，我来帮你创建一篇关于春日美食的小红书内容。让我先分析一下需求...
+
+[对话 ID: a1b2c3d4...] 请输入消息: 标题要吸引人一点
+
+📤 发送中...
+
+📥 AI 回复:
+好的，我会优化标题，让它更加吸引人...
+
+消息数: 4
+
+[对话 ID: a1b2c3d4...] 请输入消息: reset
+✅ 对话已重置
+
+[新对话] 请输入消息: quit
+再见！
+```
+
+### HTTP API 使用示例
+
+使用 `run.py` 启动服务后，可以通过 HTTP 调用：
+
+```bash
+# 启动服务
+$ cd ai_social_scheduler
+$ uv run python run.py
+INFO:     Started server process [12345]
+INFO:     Uvicorn running on http://0.0.0.0:8012
+
+# 在另一个终端发送请求
+$ curl -X POST http://localhost:8012/api/v1/chat \
+  -H "Content-Type: application/json" \
+  -d '{
+    "message": "帮我写一篇关于春日美食的小红书",
+    "thread_id": null
+  }'
+
+{
+  "thread_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "response": "好的，我来帮你创建一篇关于春日美食的小红书内容...",
+  "message_count": 2
+}
+
+# 继续对话（使用相同的 thread_id）
+$ curl -X POST http://localhost:8012/api/v1/chat \
+  -H "Content-Type: application/json" \
+  -d '{
+    "message": "标题要吸引人一点",
+    "thread_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+  }'
 ```
 
 ---

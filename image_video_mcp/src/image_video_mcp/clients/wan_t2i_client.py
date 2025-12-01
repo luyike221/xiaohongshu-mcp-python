@@ -7,6 +7,7 @@ import httpx
 from loguru import logger
 
 from ..config import settings
+from ..utils.retry import retry_api_request
 
 
 class WanT2IClient:
@@ -123,56 +124,46 @@ class WanT2IClient:
 
         logger.info(f"生成图像: prompt={prompt[:50]}..., size={size}, n={n}")
 
-        # 发送请求（带重试）
+        # 使用装饰器处理重试逻辑
+        return await self._make_request(data)
+    
+    @retry_api_request(max_retries=3)
+    async def _make_request(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        发送API请求（内部方法，使用重试装饰器）
+        
+        Args:
+            data: 请求数据
+            
+        Returns:
+            API响应结果
+        """
         endpoint_url = self.endpoint
         
-        last_error = None
-        for attempt in range(self.max_retries):
+        logger.debug(f"请求 URL: {endpoint_url}")
+        logger.debug(f"请求数据: {json.dumps(data, indent=2, ensure_ascii=False)}")
+        
+        response = await self.client.post(
+            endpoint_url,
+            json=data,
+        )
+        
+        # 如果请求失败，记录详细错误信息
+        if response.status_code != 200:
+            error_detail = response.text
+            logger.error(f"API 返回错误 (状态码 {response.status_code}): {error_detail}")
             try:
-                logger.debug(f"请求 URL: {endpoint_url}")
-                logger.debug(f"请求数据: {json.dumps(data, indent=2, ensure_ascii=False)}")
-                response = await self.client.post(
-                    endpoint_url,
-                    json=data,
-                )
-                
-                # 如果请求失败，记录详细错误信息
-                if response.status_code != 200:
-                    error_detail = response.text
-                    logger.error(f"API 返回错误 (状态码 {response.status_code}): {error_detail}")
-                    try:
-                        error_json = response.json()
-                        logger.error(f"错误详情: {json.dumps(error_json, indent=2, ensure_ascii=False)}")
-                    except:
-                        pass
-                
-                response.raise_for_status()
-                result = response.json()
-                logger.info(f"图像生成成功: {result.get('output', {}).get('task_id', 'N/A')}")
-                return result
-            except httpx.HTTPStatusError as e:
-                last_error = e
-                error_detail = ""
-                if e.response is not None:
-                    try:
-                        error_detail = e.response.text
-                        logger.error(f"HTTP 错误详情: {error_detail}")
-                    except:
-                        pass
-                logger.warning(f"请求失败 (尝试 {attempt + 1}/{self.max_retries}): {e}")
-                if attempt < self.max_retries - 1:
-                    continue
-                raise
-            except httpx.HTTPError as e:
-                last_error = e
-                logger.warning(f"请求失败 (尝试 {attempt + 1}/{self.max_retries}): {e}")
-                if attempt < self.max_retries - 1:
-                    continue
-                raise
+                error_json = response.json()
+                logger.error(f"错误详情: {json.dumps(error_json, indent=2, ensure_ascii=False)}")
+            except:
+                pass
+        
+        response.raise_for_status()
+        result = response.json()
+        logger.info(f"图像生成成功: {result.get('output', {}).get('task_id', 'N/A')}")
+        return result
 
-        if last_error:
-            raise last_error
-
+    @retry_api_request(max_retries=3)
     async def get_task_status(self, task_id: str) -> Dict[str, Any]:
         """
         获取任务状态
@@ -192,18 +183,14 @@ class WanT2IClient:
         
         logger.info(f"查询任务状态: task_id={task_id}")
         
-        try:
-            response = await self.client.get(task_url)
-            response.raise_for_status()
-            result = response.json()
-            
-            task_status = result.get("output", {}).get("task_status", "UNKNOWN")
-            logger.info(f"任务状态: {task_status}")
-            
-            return result
-        except httpx.HTTPError as e:
-            logger.error(f"查询任务状态失败: {e}")
-            raise
+        response = await self.client.get(task_url)
+        response.raise_for_status()
+        result = response.json()
+        
+        task_status = result.get("output", {}).get("task_status", "UNKNOWN")
+        logger.info(f"任务状态: {task_status}")
+        
+        return result
 
     async def close(self):
         """关闭客户端"""

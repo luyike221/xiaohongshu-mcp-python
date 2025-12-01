@@ -10,12 +10,12 @@ from ..clients import WanT2IClient
 class ImageGenerationService:
     """批量图片生成服务"""
 
-    def __init__(self, max_concurrent: int = 10):
+    def __init__(self, max_concurrent: int = 2):
         """
         初始化服务
         
         Args:
-            max_concurrent: 最大并发数，默认10个线程
+            max_concurrent: 最大并发数，默认2个线程（降低并发以避免API速率限制）
         
         注意：图片不再保存到本地，直接返回模型提供的 URL
         """
@@ -155,6 +155,9 @@ class ImageGenerationService:
         async with self.semaphore:  # 使用信号量控制并发数
             logger.info(f"开始生成图片: index={index}, type={page_type}")
             try:
+                # 在获取信号量后，添加小延迟以避免请求过于集中
+                await asyncio.sleep(0.5)  # 500ms延迟，避免请求过于集中
+                
                 prompt = self._get_prompt_from_template(
                     page_content=page.get("content", ""),
                     page_type=page_type,

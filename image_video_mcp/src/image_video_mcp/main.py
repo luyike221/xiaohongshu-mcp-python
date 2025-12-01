@@ -331,7 +331,7 @@ async def generate_images_batch(
         import base64
         import uuid
         from pathlib import Path
-        use_mock = True
+        use_mock = False
         # Mock 模式：直接返回固定的图片文件
         if use_mock:
             logger.info(f"[MOCK模式] 使用 mock 数据，返回固定图片文件")
