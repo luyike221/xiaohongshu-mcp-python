@@ -5,6 +5,7 @@
 
 import asyncio
 import os
+import platform
 from pathlib import Path
 from typing import List, Optional
 from playwright.async_api import Page, TimeoutError as PlaywrightTimeoutError
@@ -229,15 +230,68 @@ class PublishAction:
         # 等待页面加载完成
         await self.page.wait_for_load_state("networkidle", timeout=BrowserConfig.PAGE_LOAD_TIMEOUT)
         
+        # 等待发布页面关键元素出现（简化判断：只要发现按钮容器或草稿头部就认为已进入）
+        logger.info("等待发布页面关键元素出现...")
+        element_found = False
+        try:
+            # 创建两个等待任务
+            async def wait_for_btn():
+                try:
+                    await self.page.wait_for_selector('//div[@class="btn"]', timeout=BrowserConfig.ELEMENT_TIMEOUT, state="visible")
+                    return True
+                except Exception:
+                    return False
+            
+            async def wait_for_header():
+                try:
+                    await self.page.wait_for_selector('//div[contains(@class, "header-draft")]', timeout=BrowserConfig.ELEMENT_TIMEOUT, state="visible")
+                    return True
+                except Exception:
+                    return False
+            
+            # 使用 asyncio.wait 等待任一任务完成，并用 wait_for 包装以设置总体超时
+            timeout_seconds = (BrowserConfig.ELEMENT_TIMEOUT / 1000) + 5  # 转换为秒，并加5秒缓冲
+            try:
+                async def wait_for_any():
+                    done, pending = await asyncio.wait(
+                        [asyncio.create_task(wait_for_btn()), asyncio.create_task(wait_for_header())],
+                        return_when=asyncio.FIRST_COMPLETED
+                    )
+                    return done, pending
+                
+                done, pending = await asyncio.wait_for(wait_for_any(), timeout=timeout_seconds)
+                
+                # 检查完成的任务结果
+                for task in done:
+                    try:
+                        result = await task
+                        if result:
+                            element_found = True
+                            logger.info("检测到发布页面关键元素，确认已进入发布页面")
+                            break
+                    except Exception as task_error:
+                        logger.debug(f"等待任务失败: {task_error}")
+                
+                # 取消未完成的任务
+                for task in pending:
+                    task.cancel()
+                    try:
+                        await task
+                    except (asyncio.CancelledError, Exception):
+                        pass  # 忽略取消任务的异常
+                
+            except asyncio.TimeoutError:
+                logger.warning("等待发布页面关键元素超时，但继续执行")
+            
+            if not element_found:
+                logger.warning("未检测到发布页面关键元素，但继续执行")
+                
+        except Exception as e:
+            logger.warning(f"等待发布页面关键元素时出现异常: {e}，但继续执行")
+        
         # 发送进度报告：移除弹窗
         if context:
             await context.report_progress(progress=10, total=100)
-        
-        # 关闭权限弹窗（如位置权限请求）
-        await self._dismiss_permission_popups()
-        
-        # 移除其他可能的弹窗
-        await self._remove_popups()
     
     async def _select_image_publish_tab(self):
         """选择图文发布标签"""
@@ -1077,18 +1131,139 @@ class PublishAction:
         try:
             # 点击编辑器确保焦点
             await editor.click()
-            await asyncio.sleep(0.2)
+            await asyncio.sleep(0.3)
             
-            # 光标准备：执行约20次ArrowDown，确保光标移动到文本末尾
-            for _ in range(20):
-                await self.page.keyboard.press("ArrowDown")
-                await asyncio.sleep(0.05)
+            # 方法1: 优先使用快捷键移动到文本末尾（最可靠的方法）
+            logger.debug("使用快捷键移动光标到文本末尾")
+            try:
+                # 尝试使用 Ctrl+End (Windows/Linux) 或 Cmd+End (Mac)
+                if platform.system() == 'Darwin':  # Mac
+                    await self.page.keyboard.press("Meta+End")
+                else:  # Windows/Linux
+                    await self.page.keyboard.press("Control+End")
+                await asyncio.sleep(0.3)  # 等待光标移动完成
+                logger.debug("已使用快捷键移动光标")
+            except Exception as e:
+                logger.warning(f"快捷键移动光标失败: {e}，尝试备用方案")
+                # 备用：使用 End 键
+                try:
+                    await self.page.keyboard.press("End")
+                    await asyncio.sleep(0.3)
+                except Exception:
+                    pass
+            
+            # 方法2: 使用 JavaScript 验证并确保光标在末尾
+            logger.debug("使用 JavaScript 验证并确保光标在文本末尾")
+            cursor_at_end = await editor.evaluate("""
+                (element) => {
+                    try {
+                        // 检查是否是 textarea 或 input
+                        if (element.tagName === 'TEXTAREA' || element.tagName === 'INPUT') {
+                            // 验证光标位置
+                            const cursorPos = element.selectionStart || element.selectionEnd;
+                            const textLength = element.value.length;
+                            if (cursorPos === textLength) {
+                                return true; // 光标已在末尾
+                            }
+                            // 如果不在末尾，移动到末尾
+                            element.focus();
+                            element.setSelectionRange(textLength, textLength);
+                            return true;
+                        }
+                        
+                        // 对于 contenteditable 元素（如 ProseMirror 编辑器）
+                        if (element.contentEditable === 'true' || element.isContentEditable) {
+                            const selection = window.getSelection();
+                            if (!selection || selection.rangeCount === 0) {
+                                // 没有选择，创建新的范围到末尾
+                                const range = document.createRange();
+                                range.selectNodeContents(element);
+                                range.collapse(false);
+                                selection.removeAllRanges();
+                                selection.addRange(range);
+                                return true;
+                            }
+                            
+                            // 获取当前范围
+                            const range = selection.getRangeAt(0);
+                            const container = range.endContainer;
+                            
+                            // 检查是否在末尾
+                            let isAtEnd = false;
+                            if (container.nodeType === Node.TEXT_NODE) {
+                                // 文本节点：检查是否在文本末尾
+                                isAtEnd = (range.endOffset === container.textContent.length);
+                            } else {
+                                // 元素节点：检查是否是最后一个子节点
+                                isAtEnd = (!container.nextSibling && 
+                                          (!container.parentNode || 
+                                           container.parentNode === element || 
+                                           !container.parentNode.nextSibling));
+                            }
+                            
+                            if (!isAtEnd) {
+                                // 不在末尾，移动到末尾
+                                const newRange = document.createRange();
+                                
+                                // 找到最后一个文本节点
+                                let lastTextNode = null;
+                                const walker = document.createTreeWalker(
+                                    element,
+                                    NodeFilter.SHOW_TEXT,
+                                    null
+                                );
+                                
+                                let node;
+                                while (node = walker.nextNode()) {
+                                    lastTextNode = node;
+                                }
+                                
+                                if (lastTextNode) {
+                                    // 设置到最后一个文本节点的末尾
+                                    newRange.setStart(lastTextNode, lastTextNode.textContent.length);
+                                    newRange.setEnd(lastTextNode, lastTextNode.textContent.length);
+                                } else {
+                                    // 没有文本节点，移动到元素末尾
+                                    newRange.selectNodeContents(element);
+                                    newRange.collapse(false);
+                                }
+                                
+                                selection.removeAllRanges();
+                                selection.addRange(newRange);
+                            }
+                            
+                            return true;
+                        }
+                        
+                        return false;
+                    } catch (e) {
+                        console.error('移动光标失败:', e);
+                        return false;
+                    }
+                }
+            """)
+            
+            if not cursor_at_end:
+                logger.warning("JavaScript 方法可能失败，再次尝试快捷键")
+                # 再次尝试快捷键
+                try:
+                    if platform.system() == 'Darwin':
+                        await self.page.keyboard.press("Meta+End")
+                    else:
+                        await self.page.keyboard.press("Control+End")
+                    await asyncio.sleep(0.3)
+                except Exception:
+                    pass
+            
+            # 等待光标移动完成
+            await asyncio.sleep(0.2)
             
             # 回车两次：创建新的段落或行，避免在已有inline元素中插入#导致联想不弹出
-            await self.page.keyboard.press("Enter")
-            await asyncio.sleep(0.1)
+            logger.debug("创建新行用于输入标签")
             await self.page.keyboard.press("Enter")
             await asyncio.sleep(0.2)
+            await self.page.keyboard.press("Enter")
+            await asyncio.sleep(0.3)  # 增加等待时间，确保新行创建完成
             
             logger.debug("已进入可输入话题状态")
         except Exception as e:
@@ -1113,7 +1288,24 @@ class PublishAction:
         try:
             # 确保编辑器有焦点
             await editor.click()
-            await asyncio.sleep(0.1)
+            await asyncio.sleep(0.2)
+            
+            # 确保光标在文本末尾（每次输入标签前都检查）
+            logger.debug("确保光标在文本末尾")
+            try:
+                # 使用快捷键快速移动到末尾
+                if platform.system() == 'Darwin':
+                    await self.page.keyboard.press("Meta+End")
+                else:
+                    await self.page.keyboard.press("Control+End")
+                await asyncio.sleep(0.2)
+            except Exception:
+                # 备用：使用 End 键
+                try:
+                    await self.page.keyboard.press("End")
+                    await asyncio.sleep(0.2)
+                except Exception:
+                    pass
             
             # 触发联想：先输入#
             await self.page.keyboard.type("#", delay=50)

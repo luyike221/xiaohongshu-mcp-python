@@ -194,8 +194,6 @@ user_sessions_*.json
 
 # Configuration files with sensitive data
 # 包含敏感数据的配置文件
-config.local.*
-config.*.local.*
 .env.local
 .env.*.local
 # .env.example 应该被提交，所以不忽略
@@ -203,7 +201,6 @@ config.*.local.*
 secrets.*
 *.secret
 *.secrets
-config/secrets.*
 
 # Database files with sensitive data
 # 包含敏感数据的数据库文件
