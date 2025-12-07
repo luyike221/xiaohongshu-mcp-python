@@ -274,5 +274,5 @@ echo ""
 
 # 启动 Inspector，它会自动打开浏览器
 # 用户需要在浏览器界面中选择 HTTP 传输方式并输入服务器 URL
-npx --yes @modelcontextprotocol/inspector
+npx --yes @modelcontextprotocol/inspector@0.16.2
 

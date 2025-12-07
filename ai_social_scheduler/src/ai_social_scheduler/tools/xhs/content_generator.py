@@ -126,6 +126,12 @@ async def _generate_content_workflow(
             )
             result["publish"] = publish_result
             result["success"] = publish_result.get("success", False)
+            # 如果发布失败，传递错误信息
+            if not result["success"]:
+                # 优先使用 error 字段，其次使用 message 字段
+                error_msg = publish_result.get("error") or publish_result.get("message") or "发布失败，原因未知"
+                result["error"] = error_msg
+                logger.error("Publish failed", error=error_msg, publish_result=publish_result)
         elif publish and not image_urls:
             result["success"] = False
             result["error"] = "没有可用的图片，无法发布"

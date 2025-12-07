@@ -186,6 +186,40 @@ elif [ "$MODE" = "debug" ]; then
     echo -e "${YELLOW}在 VSCode 中使用 '附加到进程' 配置连接调试器${NC}"
     echo ""
     
+    # 如果有头模式，检查并设置 DISPLAY 环境变量
+    if [[ ! " ${EXTRA_ARGS[@]} " =~ " --headless " ]]; then
+        if [ -z "$DISPLAY" ]; then
+            # 检查是否有 SSH X11 转发
+            if [ -n "$SSH_CONNECTION" ] || [ -n "$SSH_CLIENT" ]; then
+                echo -e "${RED}⚠ 警告: 检测到 SSH 远程连接，但未启用 X11 转发${NC}"
+                echo -e "${YELLOW}   有头模式的浏览器窗口无法显示在本地${NC}"
+                echo -e "${YELLOW}   解决方案：使用 SSH X11 转发: ssh -X 或 ssh -Y${NC}"
+                echo -e "${YELLOW}   或使用无头模式: ./run.sh debug --headless${NC}"
+                echo ""
+            fi
+            
+            # 尝试设置默认 DISPLAY
+            if [ -S /tmp/.X11-unix/X0 ] 2>/dev/null || [ -S /tmp/.X11-unix/X1 ] 2>/dev/null; then
+                for x in 0 1; do
+                    if [ -S /tmp/.X11-unix/X$x ]; then
+                        export DISPLAY=":$x"
+                        echo -e "${GREEN}✓ 自动设置 DISPLAY=$DISPLAY${NC}"
+                        break
+                    fi
+                done
+            else
+                export DISPLAY=":0"
+                echo -e "${YELLOW}⚠ 未检测到 X server，设置 DISPLAY=:0（如果失败，请手动设置 DISPLAY 环境变量）${NC}"
+            fi
+        else
+            if echo "$DISPLAY" | grep -q "localhost\|127.0.0.1\|:"; then
+                echo -e "${GREEN}✓ 使用现有 DISPLAY=$DISPLAY（X11 转发已启用）${NC}"
+            else
+                echo -e "${GREEN}✓ 使用现有 DISPLAY=$DISPLAY${NC}"
+            fi
+        fi
+    fi
+    
     # 检查是否安装了 debugpy
     if ! uv run python -c "import debugpy" 2>/dev/null; then
         echo -e "${YELLOW}正在安装 debugpy...${NC}"
@@ -218,6 +252,79 @@ PYTHON_EOF
     
     # 使用 debugpy 启动，等待调试器连接
     exec uv run python "$DEBUG_SCRIPT" "${ENV_ARGS[@]}" "${EXTRA_ARGS[@]}"
+fi
+
+# 判断是否为有头模式
+IS_HEADED=false
+if [[ " ${EXTRA_ARGS[@]} " =~ " --no-headless " ]]; then
+    IS_HEADED=true
+elif [[ ! " ${EXTRA_ARGS[@]} " =~ " --headless " ]]; then
+    # 如果没有明确指定，根据模式判断
+    if [ "$MODE" = "dev" ] || [ "$MODE" = "debug" ]; then
+        IS_HEADED=true
+    fi
+fi
+
+# 如果有头模式，检查并设置 DISPLAY 环境变量
+if [ "$IS_HEADED" = true ]; then
+    if [ -z "$DISPLAY" ]; then
+        # 优先检测 VNC 服务器
+        VNC_DISPLAY=""
+        if command -v vncserver &> /dev/null; then
+            VNC_LIST=$(vncserver -list 2>/dev/null | grep -E "^\s*[0-9]+" | awk '{print $1}' | head -1)
+            if [ -n "$VNC_LIST" ]; then
+                VNC_DISPLAY=":$VNC_LIST"
+                # 检查对应的 socket 是否存在
+                if [ -S "/tmp/.X11-unix/X${VNC_LIST}" ]; then
+                    export DISPLAY="$VNC_DISPLAY"
+                    echo -e "${GREEN}✓ 检测到 VNC 服务器，自动设置 DISPLAY=$DISPLAY${NC}"
+                    echo -e "${YELLOW}   提示: 请在 VNC 会话的终端中运行此命令，浏览器窗口才会显示在 VNC 桌面中${NC}"
+                fi
+            fi
+        fi
+        
+        # 如果 VNC 未设置，尝试检测其他 X server
+        if [ -z "$DISPLAY" ]; then
+            if [ -S /tmp/.X11-unix/X0 ] 2>/dev/null || [ -S /tmp/.X11-unix/X1 ] 2>/dev/null; then
+                # 检测可用的 X server（优先 VNC 的 :1）
+                for x in 1 0; do
+                    if [ -S /tmp/.X11-unix/X$x ]; then
+                        export DISPLAY=":$x"
+                        echo -e "${GREEN}✓ 自动设置 DISPLAY=$DISPLAY${NC}"
+                        # 检查是否是 VNC
+                        if vncserver -list 2>/dev/null | grep -q "^\s*$x\s"; then
+                            echo -e "${YELLOW}   提示: 检测到这是 VNC 显示，请在 VNC 会话的终端中运行${NC}"
+                        fi
+                        break
+                    fi
+                done
+            else
+                # 如果没有找到 X server，尝试常见的默认值
+                export DISPLAY=":0"
+                echo -e "${YELLOW}⚠ 未检测到 X server，设置 DISPLAY=:0（如果失败，请手动设置 DISPLAY 环境变量）${NC}"
+            fi
+        fi
+        
+        # 如果检测到 SSH 连接但没有 X11 转发
+        if [ -n "$SSH_CONNECTION" ] || [ -n "$SSH_CLIENT" ]; then
+            if ! echo "$DISPLAY" | grep -q "localhost"; then
+                echo -e "${YELLOW}   提示: 当前在 SSH 终端中，浏览器窗口将显示在服务器上${NC}"
+                echo -e "${YELLOW}   如需在本地查看，请在 VNC 会话的终端中运行此命令${NC}"
+            fi
+        fi
+    else
+        # 检查 DISPLAY 是否是 X11 转发格式（通常包含 localhost 或 IP）
+        if echo "$DISPLAY" | grep -q "localhost\|127.0.0.1"; then
+            echo -e "${GREEN}✓ 使用现有 DISPLAY=$DISPLAY（X11 转发已启用）${NC}"
+        else
+            echo -e "${GREEN}✓ 使用现有 DISPLAY=$DISPLAY${NC}"
+            # 检查是否是 VNC
+            DISPLAY_NUM=$(echo "$DISPLAY" | sed 's/.*:\([0-9]*\).*/\1/')
+            if [ -n "$DISPLAY_NUM" ] && vncserver -list 2>/dev/null | grep -q "^\s*$DISPLAY_NUM\s"; then
+                echo -e "${YELLOW}   提示: 这是 VNC 显示，请在 VNC 会话的终端中运行${NC}"
+            fi
+        fi
+    fi
 fi
 
 echo ""

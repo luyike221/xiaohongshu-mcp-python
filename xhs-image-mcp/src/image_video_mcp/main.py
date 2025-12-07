@@ -7,7 +7,7 @@ from typing import Optional
 from fastmcp import FastMCP
 from loguru import logger
 
-from .clients import WanT2IClient, GoogleGenAIClient
+from .clients import WanT2IClient, GoogleGenAIClient, ZImageClient
 from .config import settings
 from .prompts import register_prompts
 from .resources import register_resources, register_resource_templates
@@ -36,10 +36,71 @@ async def generate_image(
     max_wait_time: int = 600,
 ) -> dict:
     """
-    生成图像（默认使用通义万相 WanT2I）
+    生成图像（默认使用 Z-Image）
     
-    这是默认的图片生成工具，使用通义万相 T2I 模型生成图像。
-    如需使用 Google GenAI，请使用 generate_image_with_google_genai 工具。
+    这是默认的图片生成工具，使用 Z-Image 模型生成图像。
+    如需使用其他模型，请使用对应的工具：
+    - generate_image_with_wan_t2i: 使用通义万相 WanT2I
+    - generate_image_with_google_genai: 使用 Google GenAI
+    
+    Args:
+        prompt: 图像生成提示词
+        negative_prompt: 负面提示词（可选，Z-Image 暂不支持）
+        width: 图像宽度，默认 1280
+        height: 图像高度，默认 1280
+        seed: 随机种子（可选）
+        max_wait_time: 最大等待时间（秒），默认 600 秒（10分钟），Z-Image 为同步调用，此参数暂未使用
+    
+    Returns:
+        包含生成结果的字典，result 字段包含图片的 base64 编码数据
+    """
+    try:
+        import base64
+        
+        async with ZImageClient() as client:
+            # 生成图片（同步调用，已通过 Semaphore 限制并发为1）
+            image_data = await client.generate_image(
+                prompt=prompt,
+                height=height,
+                width=width,
+                seed=seed,
+            )
+            
+            # 将图片数据编码为 base64
+            image_base64 = base64.b64encode(image_data).decode('utf-8')
+            
+            logger.info(f"Z-Image 图像生成成功: {len(image_data)} bytes")
+            return {
+                "success": True,
+                "result": image_base64,
+                "format": "base64",
+                "message": "图像生成成功",
+                "size_bytes": len(image_data),
+            }
+                
+    except Exception as e:
+        logger.error(f"图像生成失败: {e}")
+        return {
+            "success": False,
+            "error": str(e),
+            "message": "图像生成失败",
+        }
+
+
+@mcp.tool()
+async def generate_image_with_wan_t2i(
+    prompt: str,
+    negative_prompt: Optional[str] = None,
+    width: int = 1280,
+    height: int = 1280,
+    seed: Optional[int] = None,
+    max_wait_time: int = 600,
+) -> dict:
+    """
+    使用通义万相 WanT2I 生成图像（可选工具）
+    
+    这是可选的图片生成工具，使用通义万相 T2I 模型生成图像。
+    默认的图片生成工具是 generate_image（使用 Z-Image）。
     
     Args:
         prompt: 图像生成提示词
@@ -166,7 +227,7 @@ async def generate_image_with_google_genai(
     使用 Google GenAI (Gemini) 生成图像（可选工具）
     
     这是可选的图片生成工具，使用 Google GenAI (Gemini) 模型生成图像。
-    默认的图片生成工具是 generate_image（使用通义万相 WanT2I）。
+    默认的图片生成工具是 generate_image（使用 Z-Image）。
     
     特点：
     - 支持参考图片，可保持风格一致
@@ -293,12 +354,11 @@ async def generate_images_batch(
             示例: "咖啡制作教程" 或 "秋季显白美甲"
         
         user_images_base64: 用户上传的参考图片列表，可选参数，默认为 None。
-            注意：当前实现使用通义万相 WanT2I，不支持参考图片功能，此参数暂未使用。
+            注意：当前实现使用 Z-Image，不支持参考图片功能，此参数暂未使用。
             格式: ["data:image/png;base64,iVBORw0KG...", ...] 或 ["iVBORw0KG...", ...]
         
         max_wait_time: 最大等待时间（秒），可选参数，默认 600 秒（10分钟）。
-            仅在使用通义万相 WanT2I 时有效。由于 WanT2I 是异步任务，
-            需要轮询任务状态，此参数控制最大等待时间。
+            Z-Image 为同步调用，此参数暂未使用。
     Returns:
         包含生成结果的字典：
         - success (bool): 是否全部成功生成
@@ -308,7 +368,7 @@ async def generate_images_batch(
         - failed (int): 失败的页面数
         - images (list): 成功生成的图片列表，每个元素包含：
             * index (int): 页面索引
-            * url (str): 图片的 URL 地址，可直接用于访问和下载
+            * url (str): 图片的文件路径（Z-Image 返回本地文件路径），可直接用于访问和下载
             * type (str): 页面类型（"cover"、"content" 或 "summary"）
         - failed_pages (list): 失败的页面列表，每个元素包含：
             * index (int): 页面索引
@@ -331,7 +391,7 @@ async def generate_images_batch(
         import base64
         import uuid
         from pathlib import Path
-        use_mock = True
+        use_mock = False
         # Mock 模式：直接返回固定的图片文件
         if use_mock:
             logger.info(f"[MOCK模式] 使用 mock 数据，返回固定图片文件")

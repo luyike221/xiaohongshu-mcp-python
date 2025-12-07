@@ -84,7 +84,10 @@ async def xiaohongshu_debug_init_browser(
         
         # 创建浏览器管理器，使用用户的cookie存储
         user_cookie_storage = CookieStorage(f"cookies_{current_user}.json")
-        browser_manager = BrowserManager(cookie_storage=user_cookie_storage)
+        browser_manager = BrowserManager(
+            cookie_storage=user_cookie_storage,
+            headless=settings.BROWSER_HEADLESS
+        )
         
         # 确保浏览器已启动
         if not browser_manager.is_started():
@@ -364,7 +367,10 @@ async def xiaohongshu_publish_content(
         
         # 创建浏览器管理器，使用用户的cookie存储
         user_cookie_storage = CookieStorage(f"cookies_{current_user}.json")
-        browser_manager = BrowserManager(cookie_storage=user_cookie_storage)
+        browser_manager = BrowserManager(
+            cookie_storage=user_cookie_storage,
+            headless=settings.BROWSER_HEADLESS
+        )
         await browser_manager.start()
         
         # 加载用户的cookies
@@ -471,7 +477,10 @@ async def xiaohongshu_publish_video(
         
         # 创建浏览器管理器，使用用户的cookie存储
         user_cookie_storage = CookieStorage(f"cookies_{current_user}.json")
-        browser_manager = BrowserManager(cookie_storage=user_cookie_storage)
+        browser_manager = BrowserManager(
+            cookie_storage=user_cookie_storage,
+            headless=settings.BROWSER_HEADLESS
+        )
         await browser_manager.start()
         
         # 加载用户的cookies
@@ -553,7 +562,10 @@ async def xiaohongshu_search_feeds(
         
         # 创建浏览器管理器，使用用户的cookie存储
         user_cookie_storage = CookieStorage(f"cookies_{current_user}.json")
-        browser_manager = BrowserManager(cookie_storage=user_cookie_storage)
+        browser_manager = BrowserManager(
+            cookie_storage=user_cookie_storage,
+            headless=settings.BROWSER_HEADLESS
+        )
         await browser_manager.start()
         
         # 加载用户的cookies
@@ -607,7 +619,10 @@ async def xiaohongshu_get_feeds(
         
         # 创建浏览器管理器，使用用户的cookie存储
         user_cookie_storage = CookieStorage(f"cookies_{current_user}.json")
-        browser_manager = BrowserManager(cookie_storage=user_cookie_storage)
+        browser_manager = BrowserManager(
+            cookie_storage=user_cookie_storage,
+            headless=settings.BROWSER_HEADLESS
+        )
         await browser_manager.start()
         
         # 加载用户的cookies
@@ -655,7 +670,7 @@ async def xiaohongshu_list_feeds(
         current_user = username or settings.GLOBAL_USER
         
         # 创建浏览器管理器和服务实例
-        browser_manager = BrowserManager()
+        browser_manager = BrowserManager(headless=settings.BROWSER_HEADLESS)
         await browser_manager.start()
         
         try:
@@ -709,7 +724,10 @@ async def xiaohongshu_get_user_profile(
         
         # 创建浏览器管理器，使用用户的cookie存储
         user_cookie_storage = CookieStorage(f"cookies_{current_user}.json")
-        browser_manager = BrowserManager(cookie_storage=user_cookie_storage)
+        browser_manager = BrowserManager(
+            cookie_storage=user_cookie_storage,
+            headless=settings.BROWSER_HEADLESS
+        )
         await browser_manager.start()
         
         # 加载用户的cookies
@@ -775,7 +793,10 @@ async def xiaohongshu_get_feed_detail(
         
         # 创建浏览器管理器，使用用户的cookie存储
         user_cookie_storage = CookieStorage(f"cookies_{current_user}.json")
-        browser_manager = BrowserManager(cookie_storage=user_cookie_storage)
+        browser_manager = BrowserManager(
+            cookie_storage=user_cookie_storage,
+            headless=settings.BROWSER_HEADLESS
+        )
         await browser_manager.start()
         
         # 加载用户的cookies

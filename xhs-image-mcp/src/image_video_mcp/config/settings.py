@@ -86,6 +86,49 @@ class GoogleGenAIConfig(BaseSettings):
     )
 
 
+class ZImageConfig(BaseSettings):
+    """Z-Image 配置"""
+
+    model_config = SettingsConfigDict(
+        env_file=str(_env_path),
+        env_file_encoding="utf-8",
+        case_sensitive=False,
+        extra="ignore",
+    )
+
+    # API 配置
+    base_url: str = Field(
+        default="http://127.0.0.1:8000",
+        description="Z-Image API 基础 URL",
+    )
+    timeout: int = Field(
+        default=600,
+        description="请求超时时间（秒）",
+    )
+    max_retries: int = Field(
+        default=3,
+        description="最大重试次数",
+    )
+
+    # 默认参数
+    default_height: int = Field(
+        default=1024,
+        description="默认图像高度",
+    )
+    default_width: int = Field(
+        default=1024,
+        description="默认图像宽度",
+    )
+    default_num_inference_steps: int = Field(
+        default=9,
+        description="默认推理步数",
+    )
+    default_guidance_scale: float = Field(
+        default=0.0,
+        description="默认引导强度（Turbo 模型应为 0）",
+    )
+
+
 class Settings(BaseSettings):
     """全局设置"""
 
@@ -121,6 +164,19 @@ class Settings(BaseSettings):
         default=None, alias="GOOGLE_GENAI_DEFAULT_ASPECT_RATIO"
     )
 
+    # Z-Image 配置
+    z_image__base_url: Optional[str] = Field(default=None, alias="Z_IMAGE_BASE_URL")
+    z_image__timeout: Optional[int] = Field(default=None, alias="Z_IMAGE_TIMEOUT")
+    z_image__max_retries: Optional[int] = Field(default=None, alias="Z_IMAGE_MAX_RETRIES")
+    z_image__default_height: Optional[int] = Field(default=None, alias="Z_IMAGE_DEFAULT_HEIGHT")
+    z_image__default_width: Optional[int] = Field(default=None, alias="Z_IMAGE_DEFAULT_WIDTH")
+    z_image__default_num_inference_steps: Optional[int] = Field(
+        default=None, alias="Z_IMAGE_DEFAULT_NUM_INFERENCE_STEPS"
+    )
+    z_image__default_guidance_scale: Optional[float] = Field(
+        default=None, alias="Z_IMAGE_DEFAULT_GUIDANCE_SCALE"
+    )
+
     def get_wan_t2i_config(self) -> WanT2IConfig:
         """获取通义万相 T2I 配置"""
         if not self.wan_t2i__api_key:
@@ -148,6 +204,18 @@ class Settings(BaseSettings):
             model=self.google_genai__model or "gemini-3-pro-image-preview",
             temperature=self.google_genai__temperature or 1.0,
             default_aspect_ratio=self.google_genai__default_aspect_ratio or "3:4",
+        )
+
+    def get_z_image_config(self) -> ZImageConfig:
+        """获取 Z-Image 配置"""
+        return ZImageConfig(
+            base_url=self.z_image__base_url or "http://127.0.0.1:8000",
+            timeout=self.z_image__timeout or 600,
+            max_retries=self.z_image__max_retries or 3,
+            default_height=self.z_image__default_height or 1024,
+            default_width=self.z_image__default_width or 1024,
+            default_num_inference_steps=self.z_image__default_num_inference_steps or 9,
+            default_guidance_scale=self.z_image__default_guidance_scale if self.z_image__default_guidance_scale is not None else 0.0,
         )
 
 

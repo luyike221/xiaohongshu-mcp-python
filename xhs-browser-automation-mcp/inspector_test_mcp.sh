@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # MCP Inspector 调试脚本
-# 用于启动 MCP Inspector 连接到小红书 MCP 服务器进行调试
+# 用于启动 MCP Inspector 连接到图像和视频生成 MCP 服务进行调试
 
 set -e
 
@@ -14,8 +14,8 @@ CYAN='\033[0;36m'
 NC='\033[0m' # No Color
 
 # 默认配置
-DEFAULT_HOST="127.0.0.1"
-DEFAULT_PORT="8002"
+DEFAULT_HOST="localhost"
+DEFAULT_PORT="8003"
 MCP_ENDPOINT="/mcp"
 
 # 项目根目录
@@ -36,18 +36,16 @@ ${BLUE}选项:${NC}
     --endpoint PATH      MCP 端点路径（默认: ${MCP_ENDPOINT}）
     --auto-start         自动启动 MCP 服务器（如果未运行）
     --no-auto-start      不自动启动服务器，仅检查并连接（默认）
-    --server-mode MODE   服务器模式：dev 或 prod（默认: dev）
     --skip-confirm       跳过启动确认，直接启动 Inspector
     --help, -h           显示此帮助信息
 
 ${BLUE}示例:${NC}
-    ./inspector.sh                                    # 连接到默认服务器 (http://127.0.0.1:8000)
-    ./inspector.sh --port 9000                        # 连接到自定义端口
-    ./inspector.sh --auto-start                       # 自动启动服务器并连接
-    ./inspector.sh --auto-start --server-mode prod    # 自动启动生产模式服务器
-    ./inspector.sh --host 0.0.0.0 --port 8000        # 连接到指定主机和端口
-    ./inspector.sh --skip-confirm                     # 跳过确认，直接启动 Inspector
-    ./inspector.sh --auto-start --skip-confirm        # 自动启动服务器并跳过确认
+    ./inspector_test_mcp.sh                          # 连接到默认服务器 (http://localhost:8003/mcp)
+    ./inspector_test_mcp.sh --port 9000              # 连接到自定义端口
+    ./inspector_test_mcp.sh --auto-start             # 自动启动服务器并连接
+    ./inspector_test_mcp.sh --host 0.0.0.0 --port 8003  # 连接到指定主机和端口
+    ./inspector_test_mcp.sh --skip-confirm           # 跳过确认，直接启动 Inspector
+    ./inspector_test_mcp.sh --auto-start --skip-confirm  # 自动启动服务器并跳过确认
 
 ${BLUE}说明:${NC}
     - 如果使用 --auto-start，脚本会在后台启动 MCP 服务器，然后启动 Inspector
@@ -106,18 +104,17 @@ check_server() {
 
 # 启动 MCP 服务器（后台）
 start_server() {
-    local mode=$1
     local host=$2
     local port=$3
     
-    echo -e "${CYAN}正在启动 MCP 服务器（${mode} 模式）...${NC}"
+    echo -e "${CYAN}正在启动 MCP 服务器...${NC}"
     
     # 使用 run.sh 启动服务器
     if [ -f "./run.sh" ]; then
-        ./run.sh "$mode" --host "$host" --port "$port" > /tmp/xiaohongshu-mcp-server.log 2>&1 &
+        ./run.sh --host "$host" --port "$port" > /tmp/image-video-mcp-server.log 2>&1 &
         SERVER_PID=$!
         echo -e "${GREEN}服务器已启动（PID: ${SERVER_PID}）${NC}"
-        echo -e "${BLUE}日志文件: /tmp/xiaohongshu-mcp-server.log${NC}"
+        echo -e "${BLUE}日志文件: /tmp/image-video-mcp-server.log${NC}"
         
         # 等待服务器启动
         echo -e "${CYAN}等待服务器启动...${NC}"
@@ -135,7 +132,7 @@ start_server() {
         done
         echo ""
         echo -e "${RED}错误: 服务器启动超时${NC}"
-        echo -e "${YELLOW}请检查日志: /tmp/xiaohongshu-mcp-server.log${NC}"
+        echo -e "${YELLOW}请检查日志: /tmp/image-video-mcp-server.log${NC}"
         kill $SERVER_PID 2>/dev/null || true
         return 1
     else
@@ -161,7 +158,6 @@ trap cleanup EXIT INT TERM
 HOST="$DEFAULT_HOST"
 PORT="$DEFAULT_PORT"
 AUTO_START=false
-SERVER_MODE="dev"
 SKIP_CONFIRM=false
 
 while [[ $# -gt 0 ]]; do
@@ -185,14 +181,6 @@ while [[ $# -gt 0 ]]; do
         --no-auto-start)
             AUTO_START=false
             shift
-            ;;
-        --server-mode)
-            SERVER_MODE="$2"
-            if [[ "$SERVER_MODE" != "dev" && "$SERVER_MODE" != "prod" ]]; then
-                echo -e "${RED}错误: 服务器模式必须是 dev 或 prod${NC}"
-                exit 1
-            fi
-            shift 2
             ;;
         --skip-confirm)
             SKIP_CONFIRM=true
@@ -226,12 +214,12 @@ echo ""
 if ! check_server "$HOST" "$PORT"; then
     if [ "$AUTO_START" = true ]; then
         echo ""
-        if ! start_server "$SERVER_MODE" "$HOST" "$PORT"; then
+        if ! start_server "" "$HOST" "$PORT"; then
             exit 1
         fi
     else
         echo -e "${YELLOW}提示: 使用 --auto-start 选项可以自动启动服务器${NC}"
-        echo -e "${YELLOW}或者先运行: ./run.sh ${SERVER_MODE} --host ${HOST} --port ${PORT}${NC}"
+        echo -e "${YELLOW}或者先运行: ./run.sh --host ${HOST} --port ${PORT}${NC}"
         exit 1
     fi
 fi
@@ -263,8 +251,28 @@ fi
 echo -e "${CYAN}正在启动 MCP Inspector...${NC}"
 echo ""
 
+# 启动 MCP Inspector，使用 streamable HTTP 模式
+# 注意：MCP Inspector 会在后台启动，然后我们需要等待它启动完成
+# 然后尝试通过浏览器 URL 参数预设 HTTP 连接
+
+echo -e "${BLUE}配置信息:${NC}"
+echo -e "  ${CYAN}传输方式:${NC} Streamable HTTP"
+echo -e "  ${CYAN}服务器 URL:${NC} ${MCP_URL}"
+echo ""
+echo -e "${YELLOW}提示:${NC} Inspector 启动后，请在浏览器界面中："
+echo -e "  ${GREEN}1.${NC} 选择 ${GREEN}HTTP/HTTPS${NC} 传输方式（不要选择 STDIO）"
+echo -e "  ${GREEN}2.${NC} 输入服务器地址: ${GREEN}${MCP_URL}${NC}"
+echo -e "  ${GREEN}3.${NC} 点击连接"
+echo ""
+
 # 启动 MCP Inspector
-# Inspector 会启动一个本地 Web 服务器，然后在浏览器中打开交互界面
-# 用户需要在界面中配置连接信息
-npx --yes @modelcontextprotocol/inspector
+# Inspector 会启动一个本地 Web 服务器（通常在 6274 端口）
+# 然后在浏览器中打开交互界面
+# 注意：Inspector 默认使用 STDIO 模式，需要在界面中手动切换到 HTTP
+echo -e "${CYAN}正在启动 MCP Inspector...${NC}"
+echo ""
+
+# 启动 Inspector，它会自动打开浏览器
+# 用户需要在浏览器界面中选择 HTTP 传输方式并输入服务器 URL
+npx --yes @modelcontextprotocol/inspector@0.16.2
 

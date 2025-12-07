@@ -1,27 +1,33 @@
 """批量图片生成服务"""
 import uuid
 import asyncio
+import base64
+import tempfile
+from pathlib import Path
 from typing import List, Dict, Any, Optional
 from loguru import logger
 
-from ..clients import WanT2IClient
+from ..clients import ZImageClient
 
 
 class ImageGenerationService:
     """批量图片生成服务"""
 
-    def __init__(self, max_concurrent: int = 2):
+    def __init__(self, max_concurrent: int = 1):
         """
         初始化服务
         
         Args:
-            max_concurrent: 最大并发数，默认2个线程（降低并发以避免API速率限制）
+            max_concurrent: 最大并发数，默认1（Z-Image 已通过 Semaphore 限制并发为1）
         
-        注意：图片不再保存到本地，直接返回模型提供的 URL
+        注意：Z-Image 返回图片二进制数据，会保存为临时文件并返回文件路径
         """
         self.max_concurrent = max_concurrent
         self.semaphore = asyncio.Semaphore(max_concurrent)
-        logger.info(f"图片生成服务初始化（使用 URL 模式，不保存本地文件，最大并发数: {max_concurrent}）")
+        # 创建临时目录用于保存图片
+        self.temp_dir = Path(tempfile.gettempdir()) / "xhs_image_generation"
+        self.temp_dir.mkdir(parents=True, exist_ok=True)
+        logger.info(f"图片生成服务初始化（使用 Z-Image，最大并发数: {max_concurrent}）")
 
     def _get_prompt_from_template(
         self,
@@ -130,7 +136,7 @@ class ImageGenerationService:
 
     async def _generate_single_image(
         self,
-        client: WanT2IClient,
+        client: ZImageClient,
         page: Dict[str, Any],
         full_outline: str,
         user_topic: str,
@@ -140,11 +146,11 @@ class ImageGenerationService:
         生成单张图片（内部方法，使用信号量控制并发）
         
         Args:
-            client: WanT2I 客户端
+            client: Z-Image 客户端
             page: 页面信息
             full_outline: 完整大纲
             user_topic: 用户主题
-            max_wait_time: 最大等待时间
+            max_wait_time: 最大等待时间（Z-Image 为同步调用，此参数暂未使用）
             
         Returns:
             包含生成结果的字典，成功时包含 index, url, type，失败时包含 index, error
@@ -152,12 +158,9 @@ class ImageGenerationService:
         index = page.get("index", 0)
         page_type = page.get("type", "content")
         
-        async with self.semaphore:  # 使用信号量控制并发数
+        async with self.semaphore:  # 使用信号量控制并发数（Z-Image 客户端内部也有 Semaphore，双重保护）
             logger.info(f"开始生成图片: index={index}, type={page_type}")
             try:
-                # 在获取信号量后，添加小延迟以避免请求过于集中
-                await asyncio.sleep(0.5)  # 500ms延迟，避免请求过于集中
-                
                 prompt = self._get_prompt_from_template(
                     page_content=page.get("content", ""),
                     page_type=page_type,
@@ -165,47 +168,20 @@ class ImageGenerationService:
                     user_topic=user_topic
                 )
 
-                # 生成图片（使用 WanT2I）
-                result = await client.generate_image(
+                # 生成图片（使用 Z-Image，返回 bytes）
+                image_data = await client.generate_image(
                     prompt=prompt,
-                    size="1024*1365",
+                    height=1365,
+                    width=1024,
                     seed=None,
                 )
                 
-                # 轮询获取结果
-                output = result.get('output', {})
-                task_id_img = output.get('task_id')
-                task_status = output.get('task_status', 'PENDING')
-                
-                if task_status in ['PENDING', 'RUNNING']:
-                    max_polls = max_wait_time // 10
-                    poll_count = 0
-                    
-                    while poll_count < max_polls:
-                        await asyncio.sleep(10)
-                        poll_count += 1
-                        
-                        status_result = await client.get_task_status(task_id_img)
-                        status_output = status_result.get('output', {})
-                        current_status = status_output.get('task_status', 'UNKNOWN')
-                        
-                        if current_status == 'SUCCEEDED':
-                            results = status_output.get('results', [])
-                            if results and results[0].get('url'):
-                                image_url = results[0]['url']
-                                break
-                        elif current_status == 'FAILED':
-                            raise Exception(f"图片生成失败: {status_output.get('message', '未知错误')}")
-                elif task_status == 'SUCCEEDED':
-                    results = output.get('results', [])
-                    if results and results[0].get('url'):
-                        image_url = results[0]['url']
-                    else:
-                        raise Exception("未获取到图片 URL")
-                else:
-                    raise Exception(f"任务状态异常: {task_status}")
+                # 保存为临时文件
+                temp_file = self.temp_dir / f"image_{uuid.uuid4().hex[:8]}_{index}.png"
+                temp_file.write_bytes(image_data)
+                image_url = str(temp_file.absolute())
 
-                logger.info(f"✅ 页面 [{index}] 生成成功: url={image_url[:50]}...")
+                logger.info(f"✅ 页面 [{index}] 生成成功: file={image_url}")
                 return {
                     "index": index,
                     "url": image_url,
@@ -228,14 +204,14 @@ class ImageGenerationService:
         max_wait_time: int = 600,
     ) -> Dict[str, Any]:
         """
-        批量生成图片（默认使用 WanT2I）
+        批量生成图片（默认使用 Z-Image）
 
         Args:
             pages: 页面列表，每个页面包含 {index, type, content}
             full_outline: 完整大纲文本，用于保持风格一致
             user_topic: 用户原始需求，用于保持意图一致
-            user_images: 用户上传的参考图片列表（bytes），目前仅 Google GenAI 支持
-            max_wait_time: 最大等待时间（秒），仅用于 WanT2I
+            user_images: 用户上传的参考图片列表（bytes），Z-Image 暂不支持
+            max_wait_time: 最大等待时间（秒），Z-Image 为同步调用，此参数暂未使用
 
         Returns:
             包含生成结果的字典
@@ -247,10 +223,10 @@ class ImageGenerationService:
         task_id = f"task_{uuid.uuid4().hex[:8]}"
         logger.info(f"开始图片生成任务: task_id={task_id}, pages={len(pages)}")
 
-        # 默认使用 WanT2I
-        client = WanT2IClient()
+        # 默认使用 Z-Image
+        client = ZImageClient()
         
-        # 注意：WanT2I 不支持参考图片，user_images 参数暂未使用
+        # 注意：Z-Image 不支持参考图片，user_images 参数暂未使用
 
         # 分离封面和其他页面
         cover_page = None
@@ -276,8 +252,8 @@ class ImageGenerationService:
             all_pages_to_generate.append(cover_page)
         all_pages_to_generate.extend(other_pages)
 
-        # 使用线程池并行生成所有图片（使用 asyncio.gather）
-        logger.info(f"开始并行生成 {len(all_pages_to_generate)} 张图片（最大并发数: {self.max_concurrent}）")
+        # 使用 asyncio.gather 生成所有图片（Z-Image 已通过 Semaphore 限制并发为1）
+        logger.info(f"开始生成 {len(all_pages_to_generate)} 张图片（最大并发数: {self.max_concurrent}）")
         
         # 创建所有生成任务
         tasks = [

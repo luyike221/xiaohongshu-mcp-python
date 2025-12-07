@@ -399,6 +399,7 @@ class OutlineService:
             max_output_tokens = self.provider_config.get('max_output_tokens', 8000)
 
             logger.info(f"调用文本生成 API: model={model}, temperature={temperature}")
+
             outline_text = self.client.generate_text(
                 prompt=prompt,
                 model=model,
@@ -408,6 +409,7 @@ class OutlineService:
             )
 
             logger.debug(f"API 返回文本长度: {len(outline_text)} 字符")
+            logger.error(f"[DEBUG-生成文本-立即打印] 内容: {outline_text}")
             pages = self._parse_outline(outline_text)
             logger.info(f"大纲解析完成，共 {len(pages)} 页")
             

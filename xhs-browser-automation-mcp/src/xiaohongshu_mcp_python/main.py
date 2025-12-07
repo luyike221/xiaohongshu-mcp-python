@@ -99,8 +99,10 @@ def cli_main():
     # 处理 headless 参数（命令行参数优先级最高）
     if args.headless:
         GLOBAL_HEADLESS = True
+        settings.BROWSER_HEADLESS = True  # 同步更新 settings
     elif args.no_headless:
         GLOBAL_HEADLESS = False
+        settings.BROWSER_HEADLESS = False  # 同步更新 settings
     else:
         GLOBAL_HEADLESS = settings.BROWSER_HEADLESS
     
