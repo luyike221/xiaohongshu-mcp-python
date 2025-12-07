@@ -315,7 +315,7 @@ class PublishAction:
             # 步骤2: 点击图文发布标签
             logger.debug("点击图文发布标签")
             tab_element = await self.page.wait_for_selector(
-                '//div[normalize-space(.)="上传图文"][@class="container"]',
+                XiaohongshuSelectors.PUBLISH_TAB,
                 timeout=BrowserConfig.ELEMENT_TIMEOUT
             )
             

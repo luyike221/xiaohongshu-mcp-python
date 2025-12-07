@@ -50,7 +50,7 @@ class XiaohongshuSelectors:
     LOGIN_SUCCESS_INDICATOR = ".user-info"
     
     # 发布页面
-    PUBLISH_TAB = '//div[3][normalize-space(.)="上传图文"][contains(@class, "creator-tab")]'
+    PUBLISH_TAB = '//div[normalize-space(.)="上传图文"][@class="container"]'
     VIDEO_PUBLISH_TAB = '//div[normalize-space(.)="上传视频"][contains(@class, "creator-tab")]'
     UPLOAD_INPUT = ".upload-input"
     UPLOADED_IMAGE = ".img-preview-area .pr"

@@ -110,8 +110,8 @@ class ImageVideoMCPService:
                 elif tool.name == "generate_video":
                     self._generate_video_tool = tool
             
-            if not self._generate_image_tool:
-                raise ValueError("generate_image tool not found in MCP tools")
+            if not self._generate_images_batch_tool:
+                raise ValueError("generate_images_batch tool not found in MCP tools")
             
             self._initialized = True
             self.logger.info("Image Video MCP Service initialized successfully")

@@ -96,13 +96,23 @@ async def _generate_content_workflow(
             if image_result.get('success'):
                 image_urls = [img.get('url') for img in image_result.get('images', []) if img.get('url')]
         else:
-            # 单个生成
-            for i in range(image_count):
-                image_result = await image_service.generate_image(
-                    prompt=f"{description} - 图片{i+1}",
-                )
-                if image_result.get('success') and image_result.get('url'):
-                    image_urls.append(image_result['url'])
+            # 如果没有 pages，构造 pages 使用批量生成接口
+            constructed_pages = [
+                {
+                    "index": i,
+                    "type": "content",
+                    "content": f"{description} - 图片{i+1}"
+                }
+                for i in range(image_count)
+            ]
+            image_result = await image_service.generate_images_batch(
+                pages=constructed_pages,
+                full_outline=content_result.get('outline', '') or description,
+                user_topic=description,
+                max_wait_time=600,
+            )
+            if image_result.get('success'):
+                image_urls = [img.get('url') for img in image_result.get('images', []) if img.get('url')]
         
         result = {
             "success": True,
