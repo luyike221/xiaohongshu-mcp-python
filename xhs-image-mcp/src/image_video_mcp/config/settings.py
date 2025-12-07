@@ -177,6 +177,15 @@ class Settings(BaseSettings):
         default=None, alias="Z_IMAGE_DEFAULT_GUIDANCE_SCALE"
     )
 
+    # 通义千问 LLM 配置
+    qwen__api_key: Optional[str] = Field(default=None, alias="QWEN_API_KEY")
+    qwen__provider_name: Optional[str] = Field(default=None, alias="QWEN_PROVIDER_NAME")
+    qwen__model: Optional[str] = Field(default=None, alias="QWEN_MODEL")
+    qwen__base_url: Optional[str] = Field(default=None, alias="QWEN_BASE_URL")
+    qwen__endpoint_type: Optional[str] = Field(default=None, alias="QWEN_ENDPOINT_TYPE")
+    qwen__temperature: Optional[float] = Field(default=None, alias="QWEN_TEMPERATURE")
+    qwen__max_output_tokens: Optional[int] = Field(default=None, alias="QWEN_MAX_OUTPUT_TOKENS")
+
     def get_wan_t2i_config(self) -> WanT2IConfig:
         """获取通义万相 T2I 配置"""
         if not self.wan_t2i__api_key:
@@ -217,6 +226,22 @@ class Settings(BaseSettings):
             default_num_inference_steps=self.z_image__default_num_inference_steps or 9,
             default_guidance_scale=self.z_image__default_guidance_scale if self.z_image__default_guidance_scale is not None else 0.0,
         )
+
+    def get_qwen_config(self) -> dict:
+        """获取通义千问配置字典（使用 DASHSCOPE_API_KEY）"""
+        # 直接使用 DASHSCOPE_API_KEY（通义千问和通义万相共用 DashScope API）
+        if not self.wan_t2i__api_key:
+            raise ValueError("通义千问 API Key 必须配置（DASHSCOPE_API_KEY）")
+        
+        return {
+            "provider_name": self.qwen__provider_name or "qwen-plus",
+            "api_key": self.wan_t2i__api_key,
+            "model": self.qwen__model,
+            "base_url": self.qwen__base_url,
+            "endpoint_type": self.qwen__endpoint_type,
+            "temperature": self.qwen__temperature or 1.0,
+            "max_output_tokens": self.qwen__max_output_tokens or 8000,
+        }
 
 
 # 全局设置实例

@@ -252,3 +252,26 @@ docs/
 *.dmg
 *.pkg
 google-chrome-stable_current_amd64.deb
+
+# Image files - 图片文件
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.bmp
+*.svg
+*.webp
+*.ico
+*.tiff
+*.tif
+*.heic
+*.heif
+*.avif
+*.psd
+*.ai
+*.eps
+*.raw
+*.cr2
+*.nef
+*.orf
+*.sr2

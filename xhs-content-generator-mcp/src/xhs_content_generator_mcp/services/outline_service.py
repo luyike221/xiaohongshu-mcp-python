@@ -23,7 +23,7 @@ class OutlineService:
         logger.debug("初始化 OutlineService...")
         self.provider_config = provider_config or self._get_default_config()
         self.client = self._get_client()
-        self.prompt_template = self._load_prompt_template()
+        self.outline_prompt_template = self._load_prompt_template()
         self.compress_prompt_template = self._load_compress_prompt_template()
         self.title_content_tags_prompt_template = self._load_title_content_tags_prompt_template()
         logger.info(f"OutlineService 初始化完成，使用服务商: {self.provider_config.get('type', 'google_gemini')}")
@@ -364,34 +364,20 @@ class OutlineService:
 
     def generate_outline(
         self,
-        topic: str,
-        images: Optional[List[bytes]] = None,
-        image_description: Optional[str] = None
+        topic: str
     ) -> Dict[str, Any]:
         """
         生成大纲
 
         Args:
             topic: 主题
-            images: 参考图片列表（可选，仅当文本模型支持图片时使用）
-            image_description: 图片描述文本（可选，当使用 VL 模型分析图片后传入）
 
         Returns:
             包含大纲信息的字典
         """
         try:
-            logger.info(f"开始生成大纲: topic={topic[:50]}..., images={len(images) if images else 0}, has_description={image_description is not None}")
-            prompt = self.prompt_template.format(topic=topic)
-
-            # 处理图片描述或图片
-            if image_description:
-                # 如果提供了图片描述（来自 VL 模型分析），添加到 prompt
-                prompt += f"\n\n【参考图片分析结果】\n用户提供了参考图片，VL 模型分析结果如下：\n{image_description}\n\n请根据以上图片分析结果，在生成大纲时充分考虑图片的内容、风格和特点，使生成的内容与图片高度关联。"
-                logger.debug("已将 VL 模型分析的图片描述添加到提示词")
-            elif images and len(images) > 0:
-                # 如果直接提供了图片（文本模型支持图片），添加到 prompt
-                prompt += f"\n\n注意：用户提供了 {len(images)} 张参考图片，请在生成大纲时考虑这些图片的内容和风格。这些图片可能是产品图、个人照片或场景图，请根据图片内容来优化大纲，使生成的内容与图片相关联。"
-                logger.debug(f"添加了 {len(images)} 张参考图片到提示词（直接传递）")
+            logger.info(f"开始生成大纲: topic={topic[:50]}...")
+            prompt = self.outline_prompt_template.format(topic=topic)
 
             # 从配置中获取模型参数
             model = self.provider_config.get('model', 'gemini-2.0-flash-exp')
@@ -404,10 +390,10 @@ class OutlineService:
                 prompt=prompt,
                 model=model,
                 temperature=temperature,
-                max_output_tokens=max_output_tokens,
-                images=images  # 如果使用了 VL 模型，这里 images 为 None
+                max_output_tokens=max_output_tokens
             )
 
+            
             logger.debug(f"API 返回文本长度: {len(outline_text)} 字符")
             logger.error(f"[DEBUG-生成文本-立即打印] 内容: {outline_text}")
             pages = self._parse_outline(outline_text)
@@ -498,13 +484,11 @@ class OutlineService:
                 logger.info(f"最终结果 - 标题: {len(title)}字符, 正文: {len(content)}字符")
             
             logger.info(f"提取结果 - 标题: {title[:30]}..., 正文长度: {len(content)}, 标签数: {len(tags)}")
-
+            logger.error(f"[DEBUG-最终结果] pages: {pages}")
             return {
                 "success": True,
                 "outline": outline_text,
                 "pages": pages,
-                "has_images": images is not None and len(images) > 0,
-                # 新增：匹配发布接口的数据结构
                 "title": title,
                 "content": content,
                 "tags": tags
