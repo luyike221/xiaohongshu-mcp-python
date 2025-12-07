@@ -4,7 +4,7 @@ import { ref, onMounted } from 'vue'
 const isVisible = ref(true)
 const isCollapsed = ref(false)
 
-const toggleSidebar = () => {
+const toggleCollapse = () => {
   isCollapsed.value = !isCollapsed.value
   // 更新 body 类名
   if (isCollapsed.value) {
@@ -19,23 +19,28 @@ const closeSidebar = () => {
   document.body.classList.remove('xhs-sidebar-open', 'collapsed')
 }
 
-// 监听来自 content script 的消息，控制侧边栏显示/隐藏
+// 监听来自 background 的消息，控制侧边栏显示/隐藏
 onMounted(() => {
+  // 添加 body 类名
+  document.body.classList.add('xhs-sidebar-open')
+  
+  // 监听消息
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.action === 'toggleSidebar') {
       isVisible.value = !isVisible.value
       if (isVisible.value) {
         isCollapsed.value = false
-      }
-      // 更新 body 类名
-      if (isVisible.value) {
         document.body.classList.add('xhs-sidebar-open')
+        document.body.classList.remove('collapsed')
       } else {
         document.body.classList.remove('xhs-sidebar-open', 'collapsed')
       }
+      sendResponse({ success: true, visible: isVisible.value })
     }
     return true
   })
+  
+  console.log('✅ 侧边栏已初始化并显示')
 })
 </script>
 
@@ -47,7 +52,7 @@ onMounted(() => {
         <h3>小红书发布助手</h3>
       </div>
       <div class="sidebar-controls">
-        <button class="btn-icon" @click="toggleSidebar" :title="isCollapsed ? '展开' : '收起'">
+        <button class="btn-icon" @click="toggleCollapse" :title="isCollapsed ? '展开' : '收起'">
           <svg v-if="!isCollapsed" width="16" height="16" viewBox="0 0 16 16" fill="none">
             <path d="M10 12L6 8L10 4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
           </svg>

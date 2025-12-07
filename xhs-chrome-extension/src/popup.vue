@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { ref } from 'vue'
 
 const toggleSidebar = async () => {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })

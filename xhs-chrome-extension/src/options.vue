@@ -38,6 +38,7 @@ const saveSettings = async () => {
 .options {
   width: 500px;
   padding: 20px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
 }
 
 .setting-item {
@@ -47,5 +48,14 @@ const saveSettings = async () => {
 button {
   margin-top: 20px;
   padding: 8px 16px;
+  background: #ff2442;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+button:hover {
+  background: #e01e3a;
 }
 </style>
