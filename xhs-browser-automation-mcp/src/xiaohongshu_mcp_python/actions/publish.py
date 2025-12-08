@@ -216,78 +216,81 @@ class PublishAction:
         if context:
             await context.report_progress(progress=5, total=100)
         
-        # 使用更长的超时时间进行页面导航
-        await self.page.goto(
-            XiaohongshuUrls.PUBLISH_URL, 
-            wait_until="networkidle",
-            timeout=BrowserConfig.PAGE_LOAD_TIMEOUT  # 60秒超时
-        )
+        # 使用更快的等待策略进行页面导航，避免长时间卡住
+        logger.info(f"开始跳转到发布页面: {XiaohongshuUrls.PUBLISH_URL}")
+        navigation_timeout = 30000  # 30秒超时，避免长时间等待
+        try:
+            # 使用 "load" 而不是 "networkidle"，更快且更可靠
+            await self.page.goto(
+                XiaohongshuUrls.PUBLISH_URL, 
+                wait_until="load",  # 等待页面load事件，比networkidle更快
+                timeout=navigation_timeout
+            )
+            logger.info("页面跳转完成")
+        except Exception as e:
+            logger.warning(f"页面跳转时出现异常: {e}，继续执行")
         
         # 发送进度报告：页面加载中
         if context:
             await context.report_progress(progress=8, total=100)
         
-        # 等待页面加载完成
-        await self.page.wait_for_load_state("networkidle", timeout=BrowserConfig.PAGE_LOAD_TIMEOUT)
+        # 不再等待networkidle，直接进入后续步骤，通过循环检测来判断页面是否准备好
+        logger.info("跳过网络空闲等待，直接进入页面检测流程")
         
-        # 等待发布页面关键元素出现（简化判断：只要发现按钮容器或草稿头部就认为已进入）
-        logger.info("等待发布页面关键元素出现...")
-        element_found = False
-        try:
-            # 创建两个等待任务
-            async def wait_for_btn():
-                try:
-                    await self.page.wait_for_selector('//div[@class="btn"]', timeout=BrowserConfig.ELEMENT_TIMEOUT, state="visible")
-                    return True
-                except Exception:
-                    return False
+        # 等待2秒，让页面稳定
+        logger.info("等待2秒，让页面稳定...")
+        await asyncio.sleep(2)
+        logger.info("页面稳定等待完成")
+        
+        # 循环检测，最多15次，每次间隔1秒
+        logger.info("开始循环检测页面是否准备好（最多15次）...")
+        max_attempts = 15
+        page_ready = False
+        
+        for attempt in range(1, max_attempts + 1):
+            logger.info(f"第 {attempt}/{max_attempts} 次检测...")
             
-            async def wait_for_header():
-                try:
-                    await self.page.wait_for_selector('//div[contains(@class, "header-draft")]', timeout=BrowserConfig.ELEMENT_TIMEOUT, state="visible")
-                    return True
-                except Exception:
-                    return False
-            
-            # 使用 asyncio.wait 等待任一任务完成，并用 wait_for 包装以设置总体超时
-            timeout_seconds = (BrowserConfig.ELEMENT_TIMEOUT / 1000) + 5  # 转换为秒，并加5秒缓冲
             try:
-                async def wait_for_any():
-                    done, pending = await asyncio.wait(
-                        [asyncio.create_task(wait_for_btn()), asyncio.create_task(wait_for_header())],
-                        return_when=asyncio.FIRST_COMPLETED
-                    )
-                    return done, pending
+                # 1. 点击空白处去除弹窗
+                try:
+                    viewport_size = self.page.viewport_size
+                    if viewport_size:
+                        # 点击页面左侧中间位置（宽为0，长为中间）
+                        click_x = 0
+                        click_y = viewport_size["height"] // 2
+                        await self.page.mouse.click(click_x, click_y)
+                        logger.info(f"第 {attempt} 次检测：已点击空白处，尝试关闭弹窗")
+                except Exception as e:
+                    logger.info(f"第 {attempt} 次检测：点击空白处时出现异常（可忽略）: {e}")
                 
-                done, pending = await asyncio.wait_for(wait_for_any(), timeout=timeout_seconds)
+                # 2. 判断是否可以hover（尝试hover到按钮容器）
+                try:
+                    logger.info(f"第 {attempt} 次检测：尝试查找按钮容器...")
+                    btn_element = await self.page.query_selector('//div[@class="btn"]')
+                    if btn_element:
+                        # 尝试hover，如果成功说明页面准备好了
+                        logger.info(f"第 {attempt} 次检测：找到按钮容器，尝试hover...")
+                        await btn_element.hover()
+                        logger.info(f"第 {attempt} 次检测：成功hover到按钮容器，页面已准备好")
+                        page_ready = True
+                        break
+                    else:
+                        logger.info(f"第 {attempt} 次检测：未找到按钮容器，继续等待")
+                except Exception as e:
+                    logger.info(f"第 {attempt} 次检测：hover失败 - {e}")
                 
-                # 检查完成的任务结果
-                for task in done:
-                    try:
-                        result = await task
-                        if result:
-                            element_found = True
-                            logger.info("检测到发布页面关键元素，确认已进入发布页面")
-                            break
-                    except Exception as task_error:
-                        logger.debug(f"等待任务失败: {task_error}")
-                
-                # 取消未完成的任务
-                for task in pending:
-                    task.cancel()
-                    try:
-                        await task
-                    except (asyncio.CancelledError, Exception):
-                        pass  # 忽略取消任务的异常
-                
-            except asyncio.TimeoutError:
-                logger.warning("等待发布页面关键元素超时，但继续执行")
+            except Exception as e:
+                logger.info(f"第 {attempt} 次检测出现异常: {e}")
             
-            if not element_found:
-                logger.warning("未检测到发布页面关键元素，但继续执行")
-                
-        except Exception as e:
-            logger.warning(f"等待发布页面关键元素时出现异常: {e}，但继续执行")
+            # 如果还没准备好，等待1秒后继续
+            if not page_ready and attempt < max_attempts:
+                logger.info(f"第 {attempt} 次检测：页面未准备好，等待1秒后继续...")
+                await asyncio.sleep(1)
+        
+        if page_ready:
+            logger.info("确认已进入发布页面，页面已准备好")
+        else:
+            logger.warning(f"经过 {max_attempts} 次检测，未能确认页面状态，但继续执行")
         
         # 发送进度报告：移除弹窗
         if context:

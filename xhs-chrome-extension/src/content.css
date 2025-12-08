@@ -1,6 +1,6 @@
 /* Content script 样式 */
 body.xhs-sidebar-open {
-  margin-right: 360px;
+  margin-right: 400px;
   transition: margin-right 0.3s ease;
 }
 

@@ -1,11 +1,12 @@
 <script setup lang="ts">
+import { MESSAGE_ACTIONS } from './constants'
 
 const toggleSidebar = async () => {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
-  
+
   if (tab.id) {
     try {
-      await chrome.tabs.sendMessage(tab.id, { action: 'toggleSidebar' })
+      await chrome.tabs.sendMessage(tab.id, { action: MESSAGE_ACTIONS.TOGGLE_SIDEBAR })
       console.log('已切换侧边栏')
     } catch (error) {
       console.error('切换侧边栏失败:', error)

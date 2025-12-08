@@ -1,98 +1,91 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { onMounted } from 'vue'
+import { useSidebar } from './composables/useSidebar'
+import { usePublish } from './composables/usePublish'
+import SidebarHeader from './components/SidebarHeader.vue'
+import CollapsibleCard from './components/CollapsibleCard.vue'
+import PublishSection from './components/PublishSection.vue'
+import AISection from './components/AISection.vue'
+import TipsSection from './components/TipsSection.vue'
 
-const isVisible = ref(true)
-const isCollapsed = ref(false)
+const { isVisible, isCollapsed, closeSidebar } = useSidebar()
+const {
+  contentText,
+  isPublishing,
+  publishStatus,
+  publishMessage,
+  initApiUrl,
+  clearContent,
+  publishContent,
+} = usePublish()
 
-const toggleCollapse = () => {
-  isCollapsed.value = !isCollapsed.value
-  // 更新 body 类名
-  if (isCollapsed.value) {
-    document.body.classList.add('collapsed')
-  } else {
-    document.body.classList.remove('collapsed')
-  }
-}
-
-const closeSidebar = () => {
-  isVisible.value = false
-  document.body.classList.remove('xhs-sidebar-open', 'collapsed')
-}
-
-// 监听来自 background 的消息，控制侧边栏显示/隐藏
-onMounted(() => {
-  // 添加 body 类名
-  document.body.classList.add('xhs-sidebar-open')
-  
-  // 监听消息
-  chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-    if (message.action === 'toggleSidebar') {
-      isVisible.value = !isVisible.value
-      if (isVisible.value) {
-        isCollapsed.value = false
-        document.body.classList.add('xhs-sidebar-open')
-        document.body.classList.remove('collapsed')
-      } else {
-        document.body.classList.remove('xhs-sidebar-open', 'collapsed')
-      }
-      sendResponse({ success: true, visible: isVisible.value })
-    }
-    return true
-  })
-  
-  console.log('✅ 侧边栏已初始化并显示')
+// 初始化 API URL
+onMounted(async () => {
+  await initApiUrl()
 })
 </script>
 
 <template>
   <div v-if="isVisible" class="xhs-sidebar" :class="{ collapsed: isCollapsed }">
-    <!-- 侧边栏头部 -->
-    <div class="sidebar-header">
-      <div class="sidebar-title">
-        <h3>小红书发布助手</h3>
-      </div>
-      <div class="sidebar-controls">
-        <button class="btn-icon" @click="toggleCollapse" :title="isCollapsed ? '展开' : '收起'">
-          <svg v-if="!isCollapsed" width="16" height="16" viewBox="0 0 16 16" fill="none">
-            <path d="M10 12L6 8L10 4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-          </svg>
-          <svg v-else width="16" height="16" viewBox="0 0 16 16" fill="none">
-            <path d="M6 12L10 8L6 4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-          </svg>
-        </button>
-        <button class="btn-icon" @click="closeSidebar" title="关闭">
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-            <path d="M12 4L4 12M4 4L12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-          </svg>
-        </button>
-      </div>
-    </div>
+    <!-- 红色头部 -->
+    <SidebarHeader @close="closeSidebar" />
 
     <!-- 侧边栏内容 -->
     <div v-if="!isCollapsed" class="sidebar-content">
-      <div class="content-section">
-        <h4>快速操作</h4>
-        <button class="btn-primary">发布新内容</button>
-        <button class="btn-secondary">内容管理</button>
-      </div>
+      <!-- 发布内容区块 -->
+      <CollapsibleCard title="发布内容">
+        <template #icon>
+          <svg class="card-icon" width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <path
+              d="M8 0L10.163 5.527L16 6.292L12 10.146L12.944 16L8 13.236L3.056 16L4 10.146L0 6.292L5.837 5.527L8 0Z"
+              fill="#ff2442"
+            />
+          </svg>
+        </template>
+        <PublishSection
+          :content-text="contentText"
+          :is-publishing="isPublishing"
+          :publish-status="publishStatus"
+          :publish-message="publishMessage"
+          @update:content-text="contentText = $event"
+          @publish="publishContent"
+          @clear="clearContent"
+        />
+      </CollapsibleCard>
 
-      <div class="content-section">
-        <h4>功能</h4>
-        <ul class="feature-list">
-          <li>内容编辑</li>
-          <li>图片上传</li>
-          <li>标签建议</li>
-          <li>发布历史</li>
-        </ul>
-      </div>
+      <!-- AI仿写内容区块 -->
+      <CollapsibleCard title="AI 仿写内容" badge="AI">
+        <template #icon>
+          <svg class="card-icon ai-icon" width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <circle cx="8" cy="8" r="6" fill="#8B5CF6" />
+            <circle cx="6" cy="6" r="1.5" fill="white" />
+            <circle cx="10" cy="6" r="1.5" fill="white" />
+            <path
+              d="M6 10C6 10 7 11 8 11C9 11 10 10 10 10"
+              stroke="white"
+              stroke-width="1.5"
+              stroke-linecap="round"
+            />
+          </svg>
+        </template>
+        <AISection />
+      </CollapsibleCard>
 
-      <div class="content-section">
-        <h4>状态</h4>
-        <div class="status-info">
-          <span class="status-dot"></span>
-          <span>已就绪</span>
-        </div>
-      </div>
+      <!-- 使用小贴士区块 -->
+      <CollapsibleCard title="使用小贴士">
+        <template #icon>
+          <svg class="card-icon tips-icon" width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <path
+              d="M8 1V3M8 13V15M15 8H13M3 8H1M13.364 2.636L11.95 4.05M4.05 11.95L2.636 13.364M13.364 13.364L11.95 11.95M4.05 4.05L2.636 2.636"
+              stroke="#FFC107"
+              stroke-width="1.5"
+              stroke-linecap="round"
+            />
+            <circle cx="8" cy="8" r="3" stroke="#FFC107" stroke-width="1.5" />
+          </svg>
+        </template>
+        <TipsSection />
+      </CollapsibleCard>
     </div>
   </div>
 </template>
@@ -102,149 +95,41 @@ onMounted(() => {
   position: fixed;
   top: 0;
   right: 0;
-  width: 360px;
+  width: 400px;
   height: 100vh;
-  background: #ffffff;
+  background: #fff5f5;
   box-shadow: -2px 0 12px rgba(0, 0, 0, 0.1);
   z-index: 2147483647;
   display: flex;
   flex-direction: column;
   transition: transform 0.3s ease;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
+    sans-serif;
 }
 
 .xhs-sidebar.collapsed {
   width: 60px;
 }
 
-.sidebar-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 16px;
-  border-bottom: 1px solid #e8e8e8;
-  background: #fff;
-  min-height: 56px;
-}
-
-.sidebar-title h3 {
-  margin: 0;
-  font-size: 16px;
-  font-weight: 600;
-  color: #333;
-}
-
-.xhs-sidebar.collapsed .sidebar-title {
-  display: none;
-}
-
-.sidebar-controls {
-  display: flex;
-  gap: 8px;
-}
-
-.btn-icon {
-  width: 32px;
-  height: 32px;
-  border: none;
-  background: transparent;
-  border-radius: 4px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #666;
-  transition: all 0.2s;
-}
-
-.btn-icon:hover {
-  background: #f5f5f5;
-  color: #333;
-}
-
+/* 内容区域 */
 .sidebar-content {
   flex: 1;
   overflow-y: auto;
-  padding: 20px;
+  padding: 16px;
+  background: #fff5f5;
 }
 
-.content-section {
-  margin-bottom: 24px;
+/* 图标样式 */
+.card-icon {
+  flex-shrink: 0;
 }
 
-.content-section h4 {
-  margin: 0 0 12px 0;
-  font-size: 14px;
-  font-weight: 600;
-  color: #333;
+.ai-icon {
+  color: #8b5cf6;
 }
 
-.btn-primary {
-  width: 100%;
-  padding: 10px 16px;
-  background: #ff2442;
-  color: white;
-  border: none;
-  border-radius: 6px;
-  font-size: 14px;
-  font-weight: 500;
-  cursor: pointer;
-  margin-bottom: 8px;
-  transition: background 0.2s;
-}
-
-.btn-primary:hover {
-  background: #e01e3a;
-}
-
-.btn-secondary {
-  width: 100%;
-  padding: 10px 16px;
-  background: #f5f5f5;
-  color: #333;
-  border: none;
-  border-radius: 6px;
-  font-size: 14px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: background 0.2s;
-}
-
-.btn-secondary:hover {
-  background: #e8e8e8;
-}
-
-.feature-list {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-}
-
-.feature-list li {
-  padding: 8px 0;
-  color: #666;
-  font-size: 14px;
-  border-bottom: 1px solid #f5f5f5;
-}
-
-.feature-list li:last-child {
-  border-bottom: none;
-}
-
-.status-info {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 14px;
-  color: #666;
-}
-
-.status-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: #52c41a;
-  display: inline-block;
+.tips-icon {
+  color: #ffc107;
 }
 
 /* 滚动条样式 */
@@ -253,15 +138,15 @@ onMounted(() => {
 }
 
 .sidebar-content::-webkit-scrollbar-track {
-  background: #f5f5f5;
+  background: #fff5f5;
 }
 
 .sidebar-content::-webkit-scrollbar-thumb {
-  background: #d9d9d9;
+  background: #ffd6d6;
   border-radius: 3px;
 }
 
 .sidebar-content::-webkit-scrollbar-thumb:hover {
-  background: #bfbfbf;
+  background: #ffb3b3;
 }
 </style>
