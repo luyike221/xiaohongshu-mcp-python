@@ -17,6 +17,7 @@ class XHSXPath:
     
     # ============ 登录按钮 ============
     LOGIN_BUTTON_CSS = "button:has-text(\"登录\")"
+    LOGIN_BUTTON_XPATH = '//ul/div[contains(@class, "channel-list-content")]//button[normalize-space(.)="登录"]'
     
     # ============ 用户链接（登录成功标识） ============
     USER_LINK_CSS = ".main-container .user .link-wrapper .channel"

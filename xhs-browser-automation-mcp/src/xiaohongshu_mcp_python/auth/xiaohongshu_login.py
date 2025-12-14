@@ -26,8 +26,7 @@ class XiaohongshuLogin:
     XHS_URL = XHSXPath.XHS_URL
     QR_CSS = XHSXPath.QR_CSS
     QR_XPATH = XHSXPath.QR_XPATH
-    LOGIN_BUTTON_CSS = XHSXPath.LOGIN_BUTTON_CSS
-    USER_LINK_CSS = XHSXPath.USER_LINK_CSS
+    LOGIN_BUTTON_XPATH = XHSXPath.LOGIN_BUTTON_XPATH
     USER_LINK_XPATH = XHSXPath.USER_LINK_XPATH
     MASK_CSS = XHSXPath.MASK_CSS
     LOGIN_MODAL_CSS = XHSXPath.LOGIN_MODAL_CSS
@@ -60,39 +59,41 @@ class XiaohongshuLogin:
         logger.info("小红书登录管理器资源清理完成（浏览器已关闭）")
 
     async def is_logged_in(self, navigate: bool = False) -> bool:
-        """仅通过 DOM 检查是否已登录；可选是否导航到探索页"""
+        """
+        检查是否已登录
+        
+        逻辑：
+        1. 正向检查：使用 USER_LINK_XPATH，如果存在说明已登录
+        2. 负向检查：使用 LOGIN_BUTTON_XPATH，如果存在说明未登录
+        
+        Args:
+            navigate: 是否导航到探索页
+        
+        Returns:
+            是否已登录
+        """
         if not self.page_controller:
             await self.initialize()
         try:
             if navigate:
                 await self.page_controller.navigate(self.XHS_URL, wait_until="domcontentloaded")
-            # 负向检查：出现“登录”按钮通常表示未登录
+            
+            # 正向检查：如果"我"的链接存在，说明已登录
             try:
-                if await self.page_controller.has_element(self.LOGIN_BUTTON_CSS, timeout=1000):
+                await self.page_controller.wait_for_element(self.USER_LINK_XPATH, timeout=2000, state="visible")
+                logger.info("检测到用户链接元素，判断为已登录")
+                return True
+            except Exception:
+                pass
+            
+            # 负向检查：如果登录按钮存在，说明未登录
+            try:
+                if await self.page_controller.has_element(self.LOGIN_BUTTON_XPATH, timeout=2000):
                     logger.debug("检测到登录按钮，判定为未登录")
                     return False
             except Exception:
                 pass
-            # 负向信号（不强制返回）：遮罩层可能存在但不代表未登录，继续正向检查
-            try:
-                if await self.page_controller.has_element(self.MASK_CSS, timeout=1000):
-                    logger.debug("检测到遮罩层，继续进行登录态正向检查")
-            except Exception:
-                pass
-            # 正向检查：CSS 可见
-            try:
-                await self.page_controller.wait_for_element(self.USER_LINK_CSS, timeout=2000, state="visible")
-                logger.info("检测到用户链接元素（CSS可见），判断为已登录")
-                return True
-            except Exception:
-                pass
-            # 正向检查：XPath 附加（在弹窗遮挡下更稳）
-            try:
-                await self.page_controller.wait_for_element(self.USER_LINK_XPATH, timeout=2000, state="attached")
-                logger.info("检测到用户链接元素（XPath附加），判断为已登录")
-                return True
-            except Exception:
-                pass
+                
         except Exception as e:
             logger.debug(f"登录状态 DOM 检查失败: {e}")
         return False
@@ -105,9 +106,9 @@ class XiaohongshuLogin:
         if await self.is_logged_in(navigate=False):
             logger.info("已登录，跳过打开登录弹窗")
             return False
-        # 点击“登录”按钮，触发弹窗
+        # 点击"登录"按钮，触发弹窗
         try:
-            await self.page_controller.click_element(self.LOGIN_BUTTON_CSS, timeout=8000)
+            await self.page_controller.click_element(self.LOGIN_BUTTON_XPATH, timeout=8000)
             logger.info("已点击登录按钮，等待弹窗与二维码")
         except Exception as e:
             logger.warning(f"未找到或无法点击登录按钮: {e}")

@@ -136,7 +136,7 @@ class UserSessionManager:
     
     async def _check_login_expired(self, username: str) -> bool:
         """
-        检查登录是否失效（通过 XPath 判断）
+        检查登录是否失效（复用 XiaohongshuLogin.is_logged_in 方法）
         
         Args:
             username: 用户名
@@ -147,6 +147,7 @@ class UserSessionManager:
         try:
             from ..storage.cookie_storage import CookieStorage
             from ..browser import BrowserManager
+            from ..auth.xiaohongshu_login import XiaohongshuLogin
             
             # 创建 cookie 存储
             cookie_storage = CookieStorage(f"cookies_{username}.json")
@@ -156,61 +157,24 @@ class UserSessionManager:
                 logger.info(f"用户 {username} 的 cookies 文件不存在")
                 return True
             
-            # 创建临时浏览器实例检查登录状态
+            # 创建临时浏览器实例和登录管理器
             browser_manager = BrowserManager(cookie_storage=cookie_storage)
             await browser_manager.start()
             
             try:
-                page = await browser_manager.get_page()
+                # 使用 XiaohongshuLogin 的 is_logged_in 方法检查登录状态
+                login_manager = XiaohongshuLogin(browser_manager, cookie_storage)
+                await login_manager.initialize()
                 
-                # 导航到小红书主页
-                await page.goto("https://www.xiaohongshu.com/explore", wait_until="load", timeout=30000)
+                # 导航到探索页并检查登录状态
+                is_logged_in = await login_manager.is_logged_in(navigate=True)
                 
-                # 首先进行正向检查：检查是否存在"我"的链接（已登录标识）
-                # 如果存在，说明已登录，直接返回 False（未失效）
-                try:
-                    user_link_xpath = "//ul/div[contains(@class, 'channel-list-content')]/li//a[normalize-space(.)=\"我\"][contains(@class, 'link-wrapper')]"
-                    user_link = page.locator(user_link_xpath)
-                    await user_link.wait_for(state="visible", timeout=2000)
-                    logger.info(f"检测到'我'的链接，用户 {username} 已登录")
+                if is_logged_in:
+                    logger.info(f"用户 {username} 已登录，登录状态有效")
                     return False  # 已登录，未失效
-                except Exception:
-                    pass
-                
-                # 正向检查失败，进行负向检查：检查登录失效的多个条件
-                # 如果检测到任意一个未登录标识，说明登录失效
-                
-                # 1. 检查登录失效标识: //div[@class="css-jjnw1w"]
-                try:
-                    expired_element = page.locator('//div[@class="css-jjnw1w"]')
-                    await expired_element.wait_for(state="visible", timeout=2000)
-                    logger.warning(f"检测到登录失效标识（css-jjnw1w），用户 {username} 的登录已失效")
-                    return True
-                except Exception:
-                    pass
-                
-                # 2. 检查登录按钮: //ul//button[normalize-space(.)="登录"]
-                try:
-                    login_button = page.locator('//ul//button[normalize-space(.)="登录"]')
-                    await login_button.wait_for(state="visible", timeout=2000)
-                    logger.warning(f"检测到登录按钮，用户 {username} 未登录")
-                    return True
-                except Exception:
-                    pass
-                
-                # 3. 检查登录容器右侧: //div[@class="login-container"]/div[3][@class="right"]
-                try:
-                    login_container = page.locator('//div[@class="login-container"]/div[3][@class="right"]')
-                    await login_container.wait_for(state="visible", timeout=2000)
-                    logger.warning(f"检测到登录容器右侧元素，用户 {username} 未登录")
-                    return True
-                except Exception:
-                    pass
-                
-                # 所有检查都未通过，说明登录状态不确定
-                # 保守处理：不删除 cookies，返回 False（认为未失效）
-                logger.warning(f"无法确定用户 {username} 的登录状态，保持 cookies 不变")
-                return False
+                else:
+                    logger.warning(f"用户 {username} 未登录，登录已失效")
+                    return True  # 未登录，已失效
                     
             finally:
                 await browser_manager.stop(save_cookies=False)
