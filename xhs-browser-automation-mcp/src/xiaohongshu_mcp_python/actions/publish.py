@@ -25,6 +25,7 @@ from ..config import (
     BrowserConfig,
     PublishConfig,
 )
+from ..config.settings import settings
 
 
 class PublishAction:
@@ -1389,6 +1390,25 @@ class PublishAction:
             is_video: 是否为视频发布
         """
         logger.info(f"点击发布按钮 ({'视频' if is_video else '图文'})")
+        
+        # 检查是否启用发布阻塞测试模式
+        if settings.PUBLISH_BLOCK_TEST:
+            logger.warning("=" * 60)
+            logger.warning(f"⚠️  发布阻塞测试模式已启用 (PUBLISH_BLOCK_TEST=true)")
+            logger.warning(f"   当前为 {'视频' if is_video else '图文'} 发布模式")
+            logger.warning(f"   发布流程已阻塞，不会点击发布按钮")
+            logger.warning(f"   请手动检查页面内容是否正确")
+            logger.warning(f"   如需继续发布，请在 .env 中设置 PUBLISH_BLOCK_TEST=false")
+            logger.warning("=" * 60)
+            
+            # 阻塞等待，直到用户手动操作或程序被中断
+            try:
+                while True:
+                    await asyncio.sleep(10)  # 每10秒输出一次提示
+                    logger.info("发布阻塞测试模式：仍在等待中... (按 Ctrl+C 中断)")
+            except KeyboardInterrupt:
+                logger.info("发布阻塞测试模式：用户中断，退出阻塞")
+                raise Exception("发布阻塞测试模式：用户中断，未执行发布操作")
         
         try:
             if is_video:

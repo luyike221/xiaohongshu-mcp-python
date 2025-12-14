@@ -72,6 +72,10 @@ class Settings:
     DEBUG: bool = IS_DEVELOPMENT
     DEBUG_SCREENSHOTS: bool = os.getenv("DEBUG_SCREENSHOTS", "false").lower() in ("true", "1", "yes") if IS_DEVELOPMENT else False
     
+    # 发布测试配置
+    # 如果设置为 true，发布时会阻塞，不点击发布按钮（用于测试）
+    PUBLISH_BLOCK_TEST: bool = os.getenv("PUBLISH_BLOCK_TEST", "false").lower() in ("true", "1", "yes")
+    
     @classmethod
     def get_summary(cls) -> dict:
         """获取配置摘要"""
@@ -85,6 +89,7 @@ class Settings:
             "server_port": cls.SERVER_PORT,
             "global_user": cls.GLOBAL_USER,
             "debug": cls.DEBUG,
+            "publish_block_test": cls.PUBLISH_BLOCK_TEST,
         }
     
     @classmethod

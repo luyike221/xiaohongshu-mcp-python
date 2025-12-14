@@ -1,0 +1,19 @@
+flowchart LR
+    subgraph 策划
+        A[选题] --> B[脚本]
+    end
+
+    subgraph 内容
+        C[拍摄] --> D[剪辑]
+    end
+
+    subgraph 运营
+        E[发布] --> F{数据达标?}
+        F -- 否 --> G[复盘优化]
+        G --> A
+        F -- 是 --> H[结案]
+    end
+
+    B --> C
+    D --> E
+

@@ -15,21 +15,23 @@ from loguru import logger
 from ..browser.browser_manager import BrowserManager
 from ..browser.page_controller import PageController
 from ..storage.cookie_storage import CookieStorage
+from ..config.xhs_xpath import XHSXPath
 
 
 class XiaohongshuLogin:
-
-    XHS_URL = "https://www.xiaohongshu.com/explore"
-    QR_CSS = ".login-container .qrcode-img"
-    QR_XPATH = "//img[contains(@class, 'qrcode-img')]"
-    LOGIN_BUTTON_CSS = "button:has-text(\"登录\")"
-    USER_LINK_CSS = ".main-container .user .link-wrapper .channel"
-    LOGIN_COOKIES = {"xhs_sso", "xsec_token", "webId"}
-    USER_LINK_XPATH = "//ul/div[contains(@class, 'channel-list-content')]/li//a[normalize-space(.)=\"我\"][contains(@class, 'link-wrapper')]"
-    MASK_CSS = "i.reds-mask"
-    # 登录框选择器
-    LOGIN_MODAL_CSS = ".login-container"  # CSS选择器作为备用
-    LOGIN_MODAL_XPATH = "//div[@class=\"login-container\"]/div[@class=\"left\"]"  # 登录框XPath
+    """小红书登录管理器"""
+    
+    # 使用配置文件中的选择器
+    XHS_URL = XHSXPath.XHS_URL
+    QR_CSS = XHSXPath.QR_CSS
+    QR_XPATH = XHSXPath.QR_XPATH
+    LOGIN_BUTTON_CSS = XHSXPath.LOGIN_BUTTON_CSS
+    USER_LINK_CSS = XHSXPath.USER_LINK_CSS
+    USER_LINK_XPATH = XHSXPath.USER_LINK_XPATH_STRICT  # 使用更精确的版本
+    MASK_CSS = XHSXPath.MASK_CSS
+    LOGIN_MODAL_CSS = XHSXPath.LOGIN_MODAL_CSS
+    LOGIN_MODAL_XPATH = XHSXPath.LOGIN_MODAL_XPATH
+    LOGIN_COOKIES = XHSXPath.LOGIN_COOKIES
 
     def __init__(self, browser_manager: BrowserManager, cookie_storage: CookieStorage):
         self.browser_manager = browser_manager

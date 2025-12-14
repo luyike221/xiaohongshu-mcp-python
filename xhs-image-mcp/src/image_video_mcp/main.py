@@ -93,9 +93,9 @@ async def generate_images_batch(
         ```
     """
     try:
-        use_mock = False
-        # Mock 模式：直接返回固定的图片文件
-        if use_mock:
+        # Mock 模式：直接返回固定的图片文件（通过环境变量 USE_MOCK 控制）
+        if settings.use_mock:
+            logger.info("使用 Mock 模式：直接返回固定的图片文件")
             return generate_mock_images(pages)
 
         # 正常模式：调用实际的图片生成服务

@@ -5,9 +5,12 @@ Mock 图片生成服务
 """
 
 import uuid
+import os
 from pathlib import Path
 from loguru import logger
 from typing import List, Dict, Any
+
+from ..config import settings
 
 
 def generate_mock_images(pages: List[Dict[str, Any]]) -> Dict[str, Any]:
@@ -30,14 +33,64 @@ def generate_mock_images(pages: List[Dict[str, Any]]) -> Dict[str, Any]:
         - failed_pages (list): 失败的页面列表
     """
     logger.info(f"[MOCK模式] 使用 mock 数据，返回固定图片文件")
-    mock_image_path = Path("/root/project/ai_project/yx_运营/xhs_小红书运营/docs/image.png")
     
+    # 获取 Mock 图片路径（从环境变量或使用默认值）
+    if settings.mock_image_path:
+        # 如果配置了路径，使用配置的路径
+        mock_image_path = Path(settings.mock_image_path)
+        # 如果是相对路径，尝试相对于项目根目录
+        if not mock_image_path.is_absolute():
+            # 获取项目根目录（向上查找包含 pyproject.toml 的目录）
+            current_file = Path(__file__).resolve()
+            project_root = None
+            for parent in current_file.parents:
+                if (parent / "pyproject.toml").exists():
+                    project_root = parent
+                    break
+            if project_root:
+                # 相对路径相对于项目根目录的父目录（xhs_小红书运营 目录）
+                mock_image_path = project_root.parent / mock_image_path
+    else:
+        # 默认路径：尝试查找项目内的图片文件
+        current_file = Path(__file__).resolve()
+        # 向上查找项目根目录
+        project_root = None
+        for parent in current_file.parents:
+            if (parent / "pyproject.toml").exists():
+                project_root = parent
+                break
+        
+        if project_root:
+            # 尝试在项目根目录的父目录的 docs 目录下查找
+            # project_root 是 xhs-image-mcp，parent 是 xhs_小红书运营 目录
+            default_path = project_root.parent / "docs" / "image.png"
+            if default_path.exists() and os.access(default_path, os.R_OK):
+                mock_image_path = default_path
+                logger.info(f"[MOCK模式] 找到默认图片文件: {mock_image_path}")
+            else:
+                # 如果找不到，使用项目内的资源
+                mock_image_path = project_root / "data" / "image.png"
+                logger.info(f"[MOCK模式] 使用项目内资源: {mock_image_path}")
+        else:
+            # 最后的 fallback
+            mock_image_path = Path("/data/project/ai_project/yy_运营/xhs_小红书运营/docs/image.png")
+    
+    # 检查文件是否存在
     if not mock_image_path.exists():
         logger.error(f"[MOCK模式] Mock 图片文件不存在: {mock_image_path}")
         return {
             "success": False,
             "error": f"Mock 图片文件不存在: {mock_image_path}",
-            "message": "Mock 模式失败"
+            "message": "Mock 模式失败：请检查 MOCK_IMAGE_PATH 配置或确保默认路径存在"
+        }
+    
+    # 检查文件是否可读
+    if not os.access(mock_image_path, os.R_OK):
+        logger.error(f"[MOCK模式] Mock 图片文件无读取权限: {mock_image_path}")
+        return {
+            "success": False,
+            "error": f"Mock 图片文件无读取权限: {mock_image_path}",
+            "message": f"Mock 模式失败：文件权限不足，请检查文件权限（当前用户: {os.getenv('USER', 'unknown')}）"
         }
     
     # 生成任务ID

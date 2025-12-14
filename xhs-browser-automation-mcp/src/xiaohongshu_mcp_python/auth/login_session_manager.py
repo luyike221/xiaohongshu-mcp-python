@@ -246,9 +246,7 @@ class LoginSessionManager:
                 
                 # 调用 wait_for_login，阻塞直到登录框消失且"我的"按钮出现
                 success, message, cookies_saved = await session.login_manager.wait_for_login(
-                    timeout=90,
-                    interval=0.5,
-                    fresh=fresh
+                    timeout=90
                 )
                 
                 if success:

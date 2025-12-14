@@ -11,6 +11,7 @@ from .config import (
     StorageConfig,
     ApiConfig,
 )
+from .xhs_xpath import XHSXPath
 from .settings import settings, Settings
 from .types import (
     # HTTP API 响应类型
@@ -59,6 +60,7 @@ __all__ = [
     "PublishConfig",
     "StorageConfig",
     "ApiConfig",
+    "XHSXPath",
     # 设置
     "settings",
     "Settings",

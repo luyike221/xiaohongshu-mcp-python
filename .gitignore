@@ -243,8 +243,6 @@ data_*.json.zstd.xz
 # UV
 .uv/
 
-# doc
-docs/
 
 # Large binary files - 大文件
 *.deb

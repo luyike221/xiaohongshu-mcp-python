@@ -164,19 +164,7 @@ class UserSessionManager:
                 page = await browser_manager.get_page()
                 
                 # 导航到小红书主页
-                await page.goto("https://www.xiaohongshu.com/explore", wait_until="domcontentloaded", timeout=30000)
-                
-                # 等待页面加载，但不强制等待 networkidle（可能超时）
-                # 使用更宽松的等待策略
-                try:
-                    await page.wait_for_load_state("networkidle", timeout=5000)
-                except Exception:
-                    # 如果 networkidle 超时，继续等待页面基本加载完成
-                    logger.debug(f"等待 networkidle 超时，继续检查登录状态")
-                    await page.wait_for_load_state("domcontentloaded", timeout=5000)
-                
-                # 等待页面稳定
-                await asyncio.sleep(1)
+                await page.goto("https://www.xiaohongshu.com/explore", wait_until="load", timeout=30000)
                 
                 # 首先进行正向检查：检查是否存在"我"的链接（已登录标识）
                 # 如果存在，说明已登录，直接返回 False（未失效）

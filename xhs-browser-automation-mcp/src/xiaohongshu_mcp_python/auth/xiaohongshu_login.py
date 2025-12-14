@@ -11,25 +11,28 @@
 import asyncio
 from typing import Optional, Tuple
 from loguru import logger
+from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 
 from ..browser.browser_manager import BrowserManager
 from ..browser.page_controller import PageController
 from ..storage.cookie_storage import CookieStorage
+from ..config.xhs_xpath import XHSXPath
 
 
 class XiaohongshuLogin:
-
-    XHS_URL = "https://www.xiaohongshu.com/explore"
-    QR_CSS = ".login-container .qrcode-img"
-    QR_XPATH = "//img[contains(@class, 'qrcode-img')]"
-    LOGIN_BUTTON_CSS = "button:has-text(\"登录\")"
-    USER_LINK_CSS = ".main-container .user .link-wrapper .channel"
-    LOGIN_COOKIES = {"xhs_sso", "xsec_token", "webId"}
-    USER_LINK_XPATH = "//ul/div[contains(@class, 'channel-list-content')]/li//a[normalize-space(.)=\"我\"][contains(@class, 'link-wrapper')]"
-    MASK_CSS = "i.reds-mask"
-    # 登录框选择器
-    LOGIN_MODAL_CSS = ".login-container"  # CSS选择器作为备用
-    LOGIN_MODAL_XPATH = "//div[@class=\"login-container\"]/div[@class=\"left\"]"  # 登录框XPath
+    """小红书登录管理器"""
+    
+    # 使用配置文件中的选择器
+    XHS_URL = XHSXPath.XHS_URL
+    QR_CSS = XHSXPath.QR_CSS
+    QR_XPATH = XHSXPath.QR_XPATH
+    LOGIN_BUTTON_CSS = XHSXPath.LOGIN_BUTTON_CSS
+    USER_LINK_CSS = XHSXPath.USER_LINK_CSS
+    USER_LINK_XPATH = XHSXPath.USER_LINK_XPATH
+    MASK_CSS = XHSXPath.MASK_CSS
+    LOGIN_MODAL_CSS = XHSXPath.LOGIN_MODAL_CSS
+    LOGIN_MODAL_XPATH = XHSXPath.LOGIN_MODAL_XPATH
+    LOGIN_COOKIES = XHSXPath.LOGIN_COOKIES
 
     def __init__(self, browser_manager: BrowserManager, cookie_storage: CookieStorage):
         self.browser_manager = browser_manager
@@ -131,15 +134,12 @@ class XiaohongshuLogin:
             return None
         return None
 
-    async def wait_for_login(self, timeout: int = 90, interval: float = 0.5, fresh: bool = False) -> Tuple[bool, str, bool]:
+    async def wait_for_login(self, timeout: int = 90) -> Tuple[bool, str, bool]:
         """
-        阻塞等待登录成功：直到登录框消失且"我的"按钮出现
-        返回 (success, message, cookies_saved)
+        阻塞等待登录成功：直到"我的"按钮出现
         
         Args:
             timeout: 超时时间（秒），默认90秒
-            interval: 检查间隔（秒），默认0.5秒
-            fresh: 如果为True，会在等待前清空 cookies，确保不会被旧会话误判为已登录
         
         Returns:
             (success, message, cookies_saved) 元组
@@ -147,87 +147,20 @@ class XiaohongshuLogin:
         if not self.page_controller:
             await self.initialize()
         
-        # fresh 模式：清空 cookies（文件和上下文）
-        if fresh:
-            try:
-                self.cookie_storage.clear_cookies()
-                page = await self.browser_manager.get_page()
-                await page.context.clear_cookies()
-                logger.info("已清空 cookies，开始干净的登录等待")
-            except Exception as ce:
-                logger.warning(f"清空 cookies 失败: {ce}")
+        page = await self.browser_manager.get_page()
         
-        logger.info(f"开始阻塞等待登录完成，超时={timeout}s, 检查间隔={interval}s")
-        logger.info("等待条件：1) 登录框消失 2) '我的'按钮出现")
-        
-        start_time = asyncio.get_event_loop().time()
-        last_log_time = start_time
-        
-        while True:
-            # 超时判断
-            current_time = asyncio.get_event_loop().time()
-            elapsed = current_time - start_time
-            if elapsed > timeout:
-                logger.warning(f"等待登录超时（{timeout}秒）")
-                return False, f"等待登录超时（{timeout}秒）", False
-            
-            try:
-                # 检查条件1：登录框是否消失（使用CSS和XPath两种方式）
-                login_modal_exists = False
-                page = await self.browser_manager.get_page()
-                try:
-                    # 尝试使用CSS选择器检查
-                    locator_css = page.locator(self.LOGIN_MODAL_CSS)
-                    await locator_css.wait_for(state="visible", timeout=500)
-                    login_modal_exists = True
-                except Exception:
-                    try:
-                        # 如果CSS失败，尝试使用XPath
-                        locator_xpath = page.locator(self.LOGIN_MODAL_XPATH)
-                        await locator_xpath.wait_for(state="visible", timeout=500)
-                        login_modal_exists = True
-                    except Exception:
-                        # 如果都失败，假设登录框不存在
-                        login_modal_exists = False
-                
-                # 检查条件2："我的"按钮是否出现
-                user_button_exists = False
-                try:
-                    # 尝试使用XPath检查"我的"按钮（更可靠）
-                    locator_xpath = page.locator(self.USER_LINK_XPATH)
-                    await locator_xpath.wait_for(state="visible", timeout=500)
-                    user_button_exists = True
-                except Exception:
-                    try:
-                        # 如果XPath失败，尝试使用CSS
-                        locator_css = page.locator(self.USER_LINK_CSS)
-                        await locator_css.wait_for(state="visible", timeout=500)
-                        user_button_exists = True
-                    except Exception:
-                        user_button_exists = False
-                
-                # 两个条件都满足：登录框消失且"我的"按钮出现
-                if not login_modal_exists and user_button_exists:
-                    logger.info("登录完成：登录框已消失且'我的'按钮已出现")
-                    ok = await self.browser_manager.save_cookies()
-                    logger.info("登录成功，已保存 cookies")
-                    return True, "登录成功：登录框已消失且'我的'按钮已出现", ok
-                
-                # 每5秒记录一次当前状态（用于调试）
-                if current_time - last_log_time >= 5.0:
-                    logger.debug(
-                        f"等待中... (已等待 {elapsed:.1f}s / {timeout}s) - "
-                        f"登录框存在: {login_modal_exists}, "
-                        f"'我的'按钮存在: {user_button_exists}"
-                    )
-                    last_log_time = current_time
-                    
-            except asyncio.CancelledError:
-                logger.debug("等待循环被取消，继续轮询")
-            except Exception as e:
-                logger.debug(f"等待期间检查失败: {e}")
-            
-            await asyncio.sleep(interval)
+        try:
+            await page.wait_for_selector(
+                self.USER_LINK_XPATH, 
+                state="visible", 
+                timeout=timeout * 1000
+            )
+            cookies_saved = await self.browser_manager.save_cookies()
+            logger.info("✅ 登录成功，已保存 cookies")
+            return True, "登录成功", cookies_saved
+        except PlaywrightTimeoutError:
+            logger.warning(f"等待登录超时（{timeout}秒）")
+            return False, f"超时（{timeout}秒）", False
 
     async def login(self, headless: bool = False, timeout: int = 90, fresh: bool = True) -> Tuple[bool, str, bool]:
         """
@@ -256,7 +189,7 @@ class XiaohongshuLogin:
                 return True, "用户已登录", ok
             # 打开登录弹窗并阻塞等待登录完成
             await self.open_login_modal()
-            success, message, saved = await self.wait_for_login(timeout=timeout, interval=0.5, fresh=fresh)
+            success, message, saved = await self.wait_for_login(timeout=timeout)
             return success, message, saved
         except Exception as e:
             logger.error(f"登录流程失败: {e}")

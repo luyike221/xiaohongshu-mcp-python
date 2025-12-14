@@ -186,6 +186,18 @@ class Settings(BaseSettings):
     qwen__temperature: Optional[float] = Field(default=None, alias="QWEN_TEMPERATURE")
     qwen__max_output_tokens: Optional[int] = Field(default=None, alias="QWEN_MAX_OUTPUT_TOKENS")
 
+    # Mock 模式配置
+    use_mock: bool = Field(
+        default=False,
+        description="是否使用 Mock 模式（直接返回固定的图片文件，用于测试）",
+        alias="USE_MOCK"
+    )
+    mock_image_path: Optional[str] = Field(
+        default=None,
+        description="Mock 模式使用的图片文件路径（绝对路径或相对于项目根目录的路径）",
+        alias="MOCK_IMAGE_PATH"
+    )
+
     def get_wan_t2i_config(self) -> WanT2IConfig:
         """获取通义万相 T2I 配置"""
         if not self.wan_t2i__api_key:
