@@ -99,42 +99,20 @@ class LifestyleContentService:
         temperature = self.provider_config.get('temperature', 0.8)  # 生活化内容使用更高的温度
         max_output_tokens = self.provider_config.get('max_output_tokens', 2000)
         
-        # 构建人物设定描述
-        persona_desc = f"{age}岁的{gender}{profession}"
-        if personality:
-            persona_desc += f"，性格{personality}"
-        
-        # 构建场景描述
-        scene_desc = ""
-        if scene:
-            scene_desc = f"，场景是{scene}"
-        if mood:
-            scene_desc += f"，心情是{mood}"
-        
-        # 构建内容类型描述
-        type_desc = ""
-        if content_type:
-            type_desc = f"，内容类型是{content_type}"
-        
         # 构建话题提示
         topic_desc = ""
         if topic_hint:
             topic_desc = f"\n话题提示：{topic_hint}"
         
-        # 构建提示词
-        prompt = self.content_prompt_template.format(
-            profession=profession,
-            age=age,
-            gender=gender,
-            personality=personality,
-            mood=mood,
-            scene=scene or "日常生活",
-            content_type=content_type or "生活分享",
-            topic_hint=topic_desc,
-            persona_desc=persona_desc,
-            scene_desc=scene_desc,
-            type_desc=type_desc
-        )
+        # 构建提示词（使用 replace 而不是 format，避免 JSON 示例中的大括号被误解析）
+        prompt = self.content_prompt_template.replace("{profession}", str(profession))
+        prompt = prompt.replace("{age}", str(age))
+        prompt = prompt.replace("{gender}", str(gender))
+        prompt = prompt.replace("{personality}", str(personality))
+        prompt = prompt.replace("{mood}", str(mood))
+        prompt = prompt.replace("{scene}", str(scene or "日常生活"))
+        prompt = prompt.replace("{content_type}", str(content_type or "生活分享"))
+        prompt = prompt.replace("{topic_hint}", topic_desc)
         
         # 最多重试3次
         max_retries = 3
