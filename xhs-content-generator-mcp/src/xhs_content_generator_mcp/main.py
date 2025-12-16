@@ -34,11 +34,9 @@ async def generate_outline(
     Returns:
         包含生成结果的字典：
         - success: 是否成功
-        - outline: 完整的大纲文本
-        - pages: 解析后的页面列表，每个页面包含 index、type、content
-        - title: 提取的标题（匹配发布接口）
-        - content: 提取的正文内容（匹配发布接口，不包含标题和标签）
-        - tags: 提取的标签列表（匹配发布接口）
+        - title: 生成的标题（1-20字符，匹配发布接口）
+        - content: 生成的正文内容（不超过1000字符，匹配发布接口）
+        - tags: 生成的标签列表（3-5个，匹配发布接口）
         - error: 错误信息（如果失败）
     """
     try:

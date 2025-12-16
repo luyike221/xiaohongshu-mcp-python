@@ -27,7 +27,7 @@ class ImageGenerationService:
         
         Args:
             max_concurrent: 最大并发数，默认1（Z-Image 已通过 Semaphore 限制并发为1）
-            llm_client: LLM 客户端实例，用于预处理输入数据（可选）
+            llm_client: LLM 客户端实例，用于根据内容生成图片提示词（可选）
             auto_init_qwen: 是否自动从配置初始化通义千问客户端（如果 llm_client 为 None）
         
         注意：Z-Image 返回图片二进制数据，会保存为临时文件并返回文件路径
@@ -38,7 +38,7 @@ class ImageGenerationService:
         self.temp_dir = Path(tempfile.gettempdir()) / "xhs_image_generation"
         self.temp_dir.mkdir(parents=True, exist_ok=True)
         
-        # LLM 客户端（用于预处理）
+        # LLM 客户端（用于根据内容生成图片提示词）
         self.llm_model_name = None  # 保存模型名称
         if llm_client is None and auto_init_qwen:
             try:
@@ -57,19 +57,11 @@ class ImageGenerationService:
             if llm_client and hasattr(llm_client, 'model'):
                 self.llm_model_name = llm_client.model
         
-        # 配置每个 client 类型是否启用 LLM 预处理
-        # True 表示启用，False 表示不启用
-        self.llm_preprocessing_config: Dict[str, bool] = {
-            "ZImageClient": True,  # 默认启用 LLM 预处理
-            "WanT2IClient": False,  # 默认不启用
-            "GoogleGenAIClient": False,  # 默认不启用
-        }
-        
         # 注册不同 client 类型的提示词模板
         self.prompt_templates: Dict[str, Callable] = {}
         self._register_templates()
         
-        logger.info(f"图片生成服务初始化（最大并发数: {max_concurrent}, LLM预处理: {'启用' if llm_client else '未启用'}）")
+        logger.info(f"图片生成服务初始化（最大并发数: {max_concurrent}, LLM客户端: {'已配置' if self.llm_client else '未配置'}）")
     
     def _register_templates(self):
         """注册所有 client 类型的提示词模板"""
@@ -78,240 +70,88 @@ class ImageGenerationService:
         self.prompt_templates["GoogleGenAIClient"] = self._google_genai_template
         logger.debug(f"已注册 {len(self.prompt_templates)} 个提示词模板")
     
-    def set_llm_preprocessing(self, client_type: str, enabled: bool):
+    def _load_z_images_prompts(self) -> tuple[str, str]:
         """
-        设置指定 client 类型是否启用 LLM 预处理
+        加载 Z-Images 专用的提示词文件
         
-        Args:
-            client_type: 客户端类型名称（如 "ZImageClient"）
-            enabled: 是否启用预处理
+        使用相对路径从当前文件位置查找提示词文件：
+        - 当前文件：services/image_generation_service.py
+        - 提示词文件：prompts/z-images_prompt_*.txt
+        
+        Returns:
+            (system_prompt, user_prompt_template) 元组
         """
-        if client_type in self.llm_preprocessing_config:
-            self.llm_preprocessing_config[client_type] = enabled
-            logger.info(f"{client_type} 的 LLM 预处理已{'启用' if enabled else '禁用'}")
-        else:
-            logger.warning(f"未知的客户端类型: {client_type}")
+        # 使用相对路径：从 services/ 目录到 prompts/ 目录
+        current_file = Path(__file__).resolve()
+        prompts_dir = current_file.parent.parent / "prompts"
+        
+        system_prompt_path = prompts_dir / "z-images_prompt_system.txt"
+        user_prompt_path = prompts_dir / "z-images_prompt_user.txt"
+        
+        if not system_prompt_path.exists() or not user_prompt_path.exists():
+            raise FileNotFoundError(
+                f"Z-Images 提示词文件未找到。"
+                f"请确保以下文件存在：\n"
+                f"  - {system_prompt_path}\n"
+                f"  - {user_prompt_path}"
+            )
+        
+        with open(system_prompt_path, "r", encoding="utf-8") as f:
+            system_prompt = f.read()
+        
+        with open(user_prompt_path, "r", encoding="utf-8") as f:
+            user_prompt_template = f.read()
+        
+        logger.info(f"已加载 Z-Images 提示词文件: {prompts_dir}")
+        return system_prompt, user_prompt_template
     
-    async def _preprocess_with_llm(
+    async def _generate_image_prompts_from_content(
         self,
-        pages: List[Dict[str, Any]],
-        full_outline: str,
-        user_topic: str,
-        client_type: str
-    ) -> tuple[List[Dict[str, Any]], str, str]:
+        full_content: str,
+        client_type: str,
+        style: str = ""
+    ) -> List[Dict[str, Any]]:
         """
-        使用 LLM 对输入数据进行预处理，使其更符合图片生成的要求
+        根据完整内容使用 LLM 生成图片提示词
         
         Args:
-            pages: 原始页面列表
-            full_outline: 原始完整大纲
-            user_topic: 原始用户主题
+            full_content: 完整的内容文本
             client_type: 客户端类型名称
+            style: 图片风格，可选。如果提供，将使用指定的风格；如果不提供，LLM 会自动选择风格
             
         Returns:
-            (处理后的pages, 处理后的full_outline, 处理后的user_topic)
+            生成的页面列表，每个页面包含 {index, type, content}
         """
         if not self.llm_client:
-            logger.warning("LLM 客户端未配置，跳过预处理")
-            return pages, full_outline, user_topic
+            logger.warning("LLM 客户端未配置，无法生成图片提示词")
+            raise ValueError("LLM 客户端未配置，无法根据内容生成图片提示词")
         
         try:
-            logger.info(f"开始使用 LLM 预处理数据 (client_type={client_type})")
+            logger.info(f"开始使用 LLM 根据内容生成图片提示词 (client_type={client_type})")
             
-            # 构建预处理提示词
-            system_prompt = """你是一个专业的图片生成提示词优化助手。你的核心任务是：将用户提供的主体内容（完整大纲和pages）转换为适合图片生成模型的提示词，用于生成配合主体内容使用的视觉图片。
-
-═══════════════════════════════════════════════════════════════
-【核心理解】
-═══════════════════════════════════════════════════════════════
-
-1. 图片的定位：这些图片是配合主体内容（完整大纲和pages）使用的，不是独立存在的
-   - 图片应该是对主体内容的视觉补充、强化和配合
-   - 图片要呼应、强化、补充主体内容，而不是重复或冲突
-   - 图片与主体内容共同构成完整的表达
-
-2. 构图为核心：视觉设计、构图、配色、布局是核心，文字只是辅助
-   - 优先通过视觉元素（配色、构图、装饰）传达信息
-   - 文字只是辅助说明，能少就少，甚至可以完全没有
-
-3. 文字极简或可无：
-   - 图片上的文字要极度精简，只保留最核心的关键词（1-5个字）
-   - 如果视觉元素已能充分配合主体内容传达信息，可以完全没有文字
-   - 能不用文字就不用，优先用视觉元素传达信息
-
-═══════════════════════════════════════════════════════════════
-【工作流程】
-═══════════════════════════════════════════════════════════════
-
-第一步：深入理解主体内容
-- 仔细分析完整大纲、用户主题和每个页面的内容
-- 理解整体要传达的核心信息、目标受众、希望营造的氛围
-- 思考每个页面的图片如何配合对应的主体内容
-
-第二步：设计详细构图方案（核心）
-为每个页面设计详细的构图方案，这是最重要的部分。构图方案要包括：
-
-1. 视觉风格：清新/温暖/科技/简约/精致/复古等（要与主体内容风格协调）
-   - 使用真实场景，不要动漫风格、插画风格
-   - 风格描述要自然，不要强调"真实"或"非动漫"
-
-2. 配色方案：
-   - 主色调、辅助色、强调色（使用颜色名称，如"淡紫色"、"浅灰蓝色"，不要使用色号如#E1BEE7）
-   - 要与主体内容主题呼应，与整体风格协调
-   - 不要强调具体的色号、RGB值等
-
-3. 构图布局：
-   - 文字位置（上/中/下/左/右，如果无文字则说明视觉焦点位置）
-   - 视觉焦点、留白设计
-   - 要考虑与主体内容的配合
-   - 不要强调字体、字号等文字细节
-
-4. 装饰元素：
-   - 图标、插画、背景纹理、边框等具体元素
-   - 要与主体内容主题相关，能呼应主体内容
-   - 使用真实场景中的元素，不要使用动漫风格的装饰
-
-5. 视觉层次：
-   - 如何通过大小、颜色、位置突出重点
-   - 要配合主体内容的重点
-   - 不要强调字体大小、颜色数值等细节
-
-6. 配合关系说明：
-   - 明确说明图片如何呼应、强化、补充主体内容
-   - 说明图片与主体内容的配合关系
-
-第三步：提取极简文字或完全省略
-- 封面页：核心标题（1-5字）或完全省略
-- 内容页：关键词或数字或完全省略
-- 总结页：核心结论（1-3字）或完全省略
-- 如果视觉元素已能充分配合主体内容传达信息，可以完全没有文字
-
-═══════════════════════════════════════════════════════════════
-【输出格式】
-═══════════════════════════════════════════════════════════════
-
-每个页面的 content 格式：
-"极简文字（或空） | 配图方案：详细的构图设计（强调如何配合主体内容）"
-
-示例1（有文字）：
-"重要步骤 | 配图：简约风格，蓝色主调+白色辅助，文字居中上方，下方配真实场景中的步骤元素，留白充足，视觉焦点在场景元素，配合主体内容强调步骤的重要性"
-
-示例2（无文字）：
-"| 配图：简约风格，蓝色主调+白色辅助，居中配真实场景元素，留白充足，视觉焦点在场景，通过视觉元素配合主体内容传达信息，无需文字"
-
-注意：
-- 使用颜色名称（如"淡紫色"、"浅灰蓝色"），不要使用色号（如#E1BEE7）
-- 不要强调字体、字号等文字细节
-- 使用真实场景描述，不要使用动漫风格、插画风格
-- 但不要在配图方案中明确强调"真实"或"非动漫"，自然描述即可
-
-完整输出 JSON 格式：
-{
-    "pages": [
-        {
-            "index": 0, 
-            "type": "cover", 
-            "content": "极简文字（1-5个字，或空） | 配图方案：详细的构图设计"
-        },
-        ...
-    ],
-    "full_outline": "精简后的关键要点框架",
-    "user_topic": "精简后的核心关键词",
-    "global_style": "整体风格建议（配色方案、视觉风格、设计语言，用于保持所有页面风格统一，强调如何配合主体内容）"
-}
-
-═══════════════════════════════════════════════════════════════
-【重要约束】
-═══════════════════════════════════════════════════════════════
-
-1. pages 数组中每个对象的 index 和 type 字段必须与原始输入完全一致，不能改变
-2. 只允许修改 content 字段的内容，其他字段（index、type）必须保持不变
-3. 所有转换后的内容必须保持原始信息的核心本质，不能丢失关键信息
-4. 不要添加"请生成"、"要求"等指令性语言，直接给出要显示的内容"""
-
-            # 构建输入数据
-            pages_json = json.dumps(pages, ensure_ascii=False, indent=2)
-            user_prompt = f"""请将以下主体内容转换为适合图片生成模型的提示词（客户端类型：{client_type}）。
-
-═══════════════════════════════════════════════════════════════
-【输入的主体内容】
-═══════════════════════════════════════════════════════════════
-
-用户主题：
-{user_topic if user_topic else "未提供"}
-
-完整大纲：
-{full_outline if full_outline else "未提供"}
-
-页面列表：
-{pages_json}
-
-═══════════════════════════════════════════════════════════════
-【转换要求】
-═══════════════════════════════════════════════════════════════
-
-请按照以下步骤进行转换：
-
-【步骤1：理解主体内容】
-仔细分析以上主体内容，回答以下问题：
-- 完整大纲和pages要传达什么核心信息？
-- 目标受众是谁？希望营造什么氛围或情感？
-- 整体主题是什么？风格方向是什么？
-
-【步骤2：设计配图方案（核心）】
-为每个页面设计详细的构图方案，这是最重要的部分：
-
-1. 思考配合关系：
-   - 这个页面的图片如何配合对应的主体内容？
-   - 图片如何呼应、强化、补充主体内容，而不是重复？
-
-2. 设计构图方案（必须详细）：
-   - 视觉风格：具体风格名称（要与主体内容协调，使用真实场景，不要动漫风格）
-   - 配色方案：主色调、辅助色、强调色（使用颜色名称如"淡紫色"、"浅灰蓝色"，不要使用色号如#E1BEE7）
-   - 构图布局：文字位置/视觉焦点位置、留白设计、视觉层次（不要强调字体、字号等细节）
-   - 装饰元素：真实场景中的元素、背景纹理等（要与主题相关，使用真实场景，不要动漫风格）
-   - 配合说明：明确说明如何配合主体内容
-   - 注意：使用真实场景描述，但不要在配图方案中明确强调"真实"或"非动漫"，自然描述即可
-
-3. 提取极简文字或完全省略：
-   - 封面页：核心标题（1-5字）或完全省略
-   - 内容页：关键词或数字或完全省略
-   - 总结页：核心结论（1-3字）或完全省略
-   - 如果视觉元素已能充分配合主体内容传达信息，可以完全没有文字
-
-【步骤3：整体风格建议】
-根据对主体内容的理解，提供统一的整体风格建议（global_style）：
-- 整体配色方案（具体颜色）
-- 视觉风格、设计语言
-- 构图原则
-- 用于确保所有页面风格统一，构图协调
-
-═══════════════════════════════════════════════════════════════
-【输出格式要求】
-═══════════════════════════════════════════════════════════════
-
-每个页面的 content 格式：
-"极简文字（或空） | 配图方案：详细的构图设计（强调如何配合主体内容）"
-
-配图方案必须包括：
-- 视觉风格、具体配色（使用颜色名称，不要色号）、构图布局、装饰元素、视觉层次
-- 以及如何配合主体内容的说明
-- 注意：使用真实场景描述，不要强调字体、色号等细节，不要使用动漫风格
-
-═══════════════════════════════════════════════════════════════
-【重要提醒】
-═══════════════════════════════════════════════════════════════
-
-1. 图片是配合主体内容使用的，不是独立存在的
-2. 构图为核心，文字只是辅助，甚至可以完全没有文字
-3. 配图方案要非常详细，要明确说明如何配合主体内容
-4. pages 中每个对象的 index 和 type 必须与原始输入完全一致，不能改变
-5. 只允许修改 content 字段的内容
-
-请返回转换后的 JSON 格式数据。"""
+            # 根据客户端类型加载不同的提示词
+            if client_type == "ZImageClient":
+                # Z-Images 客户端：从文件加载专用提示词
+                try:
+                    system_prompt, user_prompt_template = self._load_z_images_prompts()
+                    # 格式化用户提示词模板
+                    user_prompt = user_prompt_template.format(
+                        client_type=client_type,
+                        full_content=full_content,
+                        style=style if style else "未指定，请根据内容自动选择最合适的风格"
+                    )
+                    logger.info("使用 Z-Images 专用提示词文件")
+                except FileNotFoundError as e:
+                    logger.warning(f"Z-Images 提示词文件未找到，使用默认提示词: {e}")
+                    # 如果文件未找到，使用默认提示词
+                    system_prompt = self._get_default_system_prompt()
+                    user_prompt = self._get_default_user_prompt(client_type, full_content, style)
+            else:
+                # 其他客户端：使用默认提示词
+                system_prompt = self._get_default_system_prompt()
+                user_prompt = self._get_default_user_prompt(client_type, full_content, style)
 
             # 调用 LLM 客户端（同步调用，在异步环境中运行）
-            # 获取模型名称（使用保存的模型名称或默认值）
             model_name = self.llm_model_name or getattr(self.llm_client, 'model', None) or "qwen-plus"
             loop = asyncio.get_event_loop()
             result_text = await loop.run_in_executor(
@@ -336,41 +176,64 @@ class ImageGenerationService:
                 
                 result_data = json.loads(result_text)
                 
-                # 提取处理后的数据
-                processed_pages = result_data.get("pages", pages)
-                processed_outline = result_data.get("full_outline", full_outline)
-                processed_topic = result_data.get("user_topic", user_topic)
-                global_style = result_data.get("global_style", "")  # 整体风格建议（可选）
+                # 提取生成的页面列表
+                generated_pages = result_data.get("pages", [])
+                global_style = result_data.get("global_style", "")
                 
-                logger.info(f"LLM 预处理成功：处理了 {len(processed_pages)} 个页面")
+                if not generated_pages:
+                    raise ValueError("LLM 未生成任何页面")
                 
-                # 打印预处理后的内容（JSON 格式化）
+                logger.info(f"LLM 生成图片提示词成功：生成了 {len(generated_pages)} 张图片的提示词")
+                
+                # 打印生成的内容（JSON 格式化）
                 logger.info("=" * 80)
-                logger.info("【LLM 预处理后的内容】")
+                logger.info("【LLM 生成的图片提示词】")
                 logger.info("=" * 80)
                 processed_result = {
-                    "user_topic": processed_topic,
-                    "full_outline": processed_outline,
-                    "pages": processed_pages
+                    "pages": generated_pages
                 }
                 if global_style:
                     processed_result["global_style"] = global_style
                 logger.info(json.dumps(processed_result, ensure_ascii=False, indent=2))
                 logger.info("=" * 80)
                 
-                return processed_pages, processed_outline, processed_topic
+                return generated_pages
                 
             except json.JSONDecodeError as e:
                 logger.error(f"LLM 返回的 JSON 格式错误: {e}")
                 logger.debug(f"LLM 返回内容: {result_text[:500]}")
-                # JSON 解析失败，返回原始数据
-                return pages, full_outline, user_topic
+                raise ValueError(f"LLM 返回的 JSON 格式错误: {e}")
             
         except Exception as e:
-            logger.error(f"LLM 预处理失败: {e}，使用原始数据")
+            logger.error(f"LLM 生成图片提示词失败: {e}")
             import traceback
             logger.debug(traceback.format_exc())
-            return pages, full_outline, user_topic
+            raise
+    
+    def _get_default_system_prompt(self) -> str:
+        """获取默认的系统提示词（用于非 Z-Images 客户端）"""
+        return """你是一个专业的图片生成提示词优化助手。你的核心任务是：根据用户提供的完整内容文本，生成适合图片生成模型的提示词，用于生成配合内容使用的视觉图片。
+
+请根据内容生成适合的图片提示词，确保提示词清晰、详细，能够指导图片生成模型生成符合要求的图片。"""
+    
+    def _get_default_user_prompt(self, client_type: str, full_content: str, style: str = "") -> str:
+        """获取默认的用户提示词（用于非 Z-Images 客户端）"""
+        style_text = f"\n\n风格要求：{style}" if style else "\n\n风格要求：未指定，请根据内容自动选择最合适的风格"
+        return f"""请根据以下完整内容文本，生成适合图片生成模型的提示词（客户端类型：{client_type}）。
+
+完整内容：
+{full_content}{style_text}
+
+请生成适合的图片提示词，返回 JSON 格式：
+{{
+    "pages": [
+        {{
+            "index": 0,
+            "type": "cover",
+            "content": "图片提示词内容"
+        }}
+    ]
+}}"""
     
     def _get_template_for_client(self, client: Union[ZImageClient, WanT2IClient, GoogleGenAIClient]) -> Callable:
         """
@@ -396,8 +259,6 @@ class ImageGenerationService:
         self,
         page_content: str,
         page_type: str,
-        full_outline: str = "",
-        user_topic: str = ""
     ) -> str:
         """
         Z-Image 客户端的提示词模板
@@ -405,8 +266,6 @@ class ImageGenerationService:
         Args:
             page_content: 页面内容（已包含文字和配图方案）
             page_type: 页面类型（封面/内容/总结）
-            full_outline: 完整大纲（不使用）
-            user_topic: 用户原始需求（不使用）
 
         Returns:
             生成的提示词（只包含 page_content）
@@ -419,8 +278,6 @@ class ImageGenerationService:
         self,
         page_content: str,
         page_type: str,
-        full_outline: str = "",
-        user_topic: str = ""
     ) -> str:
         """
         通义万相 T2I 客户端的提示词模板
@@ -428,8 +285,6 @@ class ImageGenerationService:
         Args:
             page_content: 页面内容
             page_type: 页面类型（封面/内容/总结）
-            full_outline: 完整大纲
-            user_topic: 用户原始需求
 
         Returns:
             生成的提示词
@@ -453,17 +308,12 @@ class ImageGenerationService:
 - 配色和谐，视觉吸引力强
 - 适合手机屏幕查看
 
-用户需求：{user_topic if user_topic else "未提供"}
-完整大纲：{full_outline if full_outline else "未提供"}
-
 请生成精美的小红书风格图片，不要有任何logo、水印、手机边框或白色留边。"""
     
     def _google_genai_template(
         self,
         page_content: str,
         page_type: str,
-        full_outline: str = "",
-        user_topic: str = ""
     ) -> str:
         """
         Google GenAI 客户端的提示词模板
@@ -471,8 +321,6 @@ class ImageGenerationService:
         Args:
             page_content: 页面内容
             page_type: 页面类型（封面/内容/总结）
-            full_outline: 完整大纲
-            user_topic: 用户原始需求
 
         Returns:
             生成的提示词
@@ -497,9 +345,6 @@ Design requirements:
 - Suitable for mobile screen viewing
 - No logos, watermarks, phone frames, or white borders
 
-User requirement: {user_topic if user_topic else "Not provided"}
-Full outline: {full_outline if full_outline else "Not provided"}
-
 Please generate a beautiful Xiaohongshu style image according to the above requirements."""
     
     def _get_prompt_from_template(
@@ -507,8 +352,6 @@ Please generate a beautiful Xiaohongshu style image according to the above requi
         client: Union[ZImageClient, WanT2IClient, GoogleGenAIClient],
         page_content: str,
         page_type: str,
-        full_outline: str = "",
-        user_topic: str = ""
     ) -> str:
         """
         根据 client 类型使用对应的 prompt 模板生成提示词
@@ -517,21 +360,17 @@ Please generate a beautiful Xiaohongshu style image according to the above requi
             client: 图片生成客户端实例
             page_content: 页面内容
             page_type: 页面类型（封面/内容/总结）
-            full_outline: 完整大纲
-            user_topic: 用户原始需求
 
         Returns:
             生成的提示词
         """
         template_func = self._get_template_for_client(client)
-        return template_func(page_content, page_type, full_outline, user_topic)
+        return template_func(page_content, page_type)
 
     async def _generate_single_image(
         self,
         client: Union[ZImageClient, WanT2IClient, GoogleGenAIClient],
         page: Dict[str, Any],
-        full_outline: str,
-        user_topic: str,
         max_wait_time: int,
     ) -> Dict[str, Any]:
         """
@@ -540,8 +379,6 @@ Please generate a beautiful Xiaohongshu style image according to the above requi
         Args:
             client: 图片生成客户端（支持 ZImageClient, WanT2IClient, GoogleGenAIClient）
             page: 页面信息
-            full_outline: 完整大纲
-            user_topic: 用户主题
             max_wait_time: 最大等待时间（秒）
             
         Returns:
@@ -559,8 +396,6 @@ Please generate a beautiful Xiaohongshu style image according to the above requi
                     client=client,
                     page_content=page.get("content", ""),
                     page_type=page_type,
-                    full_outline=full_outline,
-                    user_topic=user_topic
                 )
 
                 # 根据不同的 client 类型调用不同的生成方法
@@ -608,8 +443,6 @@ Please generate a beautiful Xiaohongshu style image according to the above requi
     async def generate_images(
         self,
         pages: List[Dict[str, Any]],
-        full_outline: str = "",
-        user_topic: str = "",
         max_wait_time: int = 600,
         client: Optional[Union[ZImageClient, WanT2IClient, GoogleGenAIClient]] = None,
     ) -> Dict[str, Any]:
@@ -618,8 +451,6 @@ Please generate a beautiful Xiaohongshu style image according to the above requi
 
         Args:
             pages: 页面列表，每个页面包含 {index, type, content}
-            full_outline: 完整大纲文本，用于保持风格一致
-            user_topic: 用户原始需求，用于保持意图一致
             max_wait_time: 最大等待时间（秒）
             client: 图片生成客户端实例，如果不提供则默认使用 ZImageClient
 
@@ -638,23 +469,6 @@ Please generate a beautiful Xiaohongshu style image according to the above requi
         
         client_type = type(client).__name__
         logger.info(f"开始图片生成任务: task_id={task_id}, pages={len(pages)}, client={client_type}")
-
-        # 根据配置决定是否进行 LLM 预处理
-        should_preprocess = self.llm_preprocessing_config.get(client_type, False)
-        if should_preprocess and self.llm_client:
-            logger.info(f"对 {client_type} 启用 LLM 预处理")
-            pages, full_outline, user_topic = await self._preprocess_with_llm(
-                pages=pages,
-                full_outline=full_outline,
-                user_topic=user_topic,
-                client_type=client_type
-            )
-            logger.info(f"LLM 预处理完成，pages数量: {len(pages)}")
-        else:
-            if should_preprocess and not self.llm_client:
-                logger.warning(f"{client_type} 配置了预处理，但 LLM 客户端未初始化，跳过预处理")
-            else:
-                logger.debug(f"{client_type} 未启用 LLM 预处理，使用原始数据")
 
         # 分离封面和其他页面
         cover_page = None
@@ -688,8 +502,6 @@ Please generate a beautiful Xiaohongshu style image according to the above requi
             self._generate_single_image(
                 client=client,
                 page=page,
-                full_outline=full_outline,
-                user_topic=user_topic,
                 max_wait_time=max_wait_time,
             )
             for page in all_pages_to_generate
@@ -728,4 +540,53 @@ Please generate a beautiful Xiaohongshu style image according to the above requi
 
         logger.info(f"图片生成任务完成: task_id={task_id}, 成功={len(generated_images)}, 失败={len(failed_pages)}")
         return result
+    
+    async def generate_images_from_content(
+        self,
+        full_content: str,
+        style: str = "",
+        max_wait_time: int = 600,
+        client: Optional[Union[ZImageClient, WanT2IClient, GoogleGenAIClient]] = None,
+    ) -> Dict[str, Any]:
+        """
+        根据完整内容生成图片
+        
+        Args:
+            full_content: 完整的内容文本
+            style: 图片风格，可选。如果提供，将使用指定的风格；如果不提供，LLM 会自动选择风格
+            max_wait_time: 最大等待时间（秒）
+            client: 图片生成客户端实例，如果不提供则默认使用 ZImageClient
+            
+        Returns:
+            包含生成结果的字典
+        """
+        if not full_content or not full_content.strip():
+            raise ValueError("full_content 不能为空")
+        
+        # 如果没有提供 client，默认使用 Z-Image
+        if client is None:
+            client = ZImageClient()
+        
+        client_type = type(client).__name__
+        style_info = f", 风格: {style}" if style else ", 风格: 自动选择"
+        logger.info(f"开始根据内容生成图片: full_content长度={len(full_content)}, client={client_type}{style_info}")
+        
+        # 使用 LLM 根据内容生成图片提示词
+        if not self.llm_client:
+            raise ValueError("LLM 客户端未配置，无法根据内容生成图片提示词。请设置 auto_init_qwen=True 或提供 llm_client")
+        
+        logger.info(f"使用 LLM 根据内容生成图片提示词")
+        pages = await self._generate_image_prompts_from_content(
+            full_content=full_content,
+            client_type=client_type,
+            style=style
+        )
+        logger.info(f"LLM 生成图片提示词完成，pages数量: {len(pages)}")
+        
+        # 调用 generate_images 方法生成图片
+        return await self.generate_images(
+            pages=pages,
+            max_wait_time=max_wait_time,
+            client=client,
+        )
 

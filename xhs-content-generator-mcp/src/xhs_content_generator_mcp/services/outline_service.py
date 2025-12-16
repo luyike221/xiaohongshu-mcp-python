@@ -2,7 +2,7 @@
 import re
 import time
 from pathlib import Path
-from typing import Dict, List, Any, Optional
+from typing import Dict, Any, Optional
 
 from loguru import logger
 
@@ -23,8 +23,6 @@ class OutlineService:
         logger.debug("初始化 OutlineService...")
         self.provider_config = provider_config or self._get_default_config()
         self.client = self._get_client()
-        self.outline_prompt_template = self._load_prompt_template()
-        self.compress_prompt_template = self._load_compress_prompt_template()
         self.title_content_tags_prompt_template = self._load_title_content_tags_prompt_template()
         logger.info(f"OutlineService 初始化完成，使用服务商: {self.provider_config.get('type', 'google_gemini')}")
 
@@ -56,24 +54,6 @@ class OutlineService:
         logger.info(f"使用文本服务商: {self.provider_config.get('type', 'google_gemini')}")
         return get_text_chat_client(self.provider_config)
 
-    def _load_prompt_template(self) -> str:
-        """加载提示词模板"""
-        prompt_path = Path(__file__).parent.parent / "prompts" / "outline_prompt.txt"
-        if not prompt_path.exists():
-            raise FileNotFoundError(f"提示词模板文件不存在: {prompt_path}")
-        
-        with open(prompt_path, "r", encoding="utf-8") as f:
-            return f.read()
-    
-    def _load_compress_prompt_template(self) -> str:
-        """加载压缩提示词模板"""
-        prompt_path = Path(__file__).parent.parent / "prompts" / "compress_prompt.txt"
-        if not prompt_path.exists():
-            raise FileNotFoundError(f"压缩提示词模板文件不存在: {prompt_path}")
-        
-        with open(prompt_path, "r", encoding="utf-8") as f:
-            return f.read()
-    
     def _load_title_content_tags_prompt_template(self) -> str:
         """加载标题正文标签生成提示词模板"""
         prompt_path = Path(__file__).parent.parent / "prompts" / "title_content_tags_prompt.txt"
@@ -83,47 +63,13 @@ class OutlineService:
         with open(prompt_path, "r", encoding="utf-8") as f:
             return f.read()
 
-    def _parse_outline(self, outline_text: str) -> List[Dict[str, Any]]:
-        """解析大纲文本为页面列表"""
-        # 按 <page> 分割页面（兼容旧的 --- 分隔符）
-        if '<page>' in outline_text:
-            pages_raw = re.split(r'<page>', outline_text, flags=re.IGNORECASE)
-        else:
-            # 向后兼容：如果没有 <page> 则使用 ---
-            pages_raw = outline_text.split("---")
-
-        pages = []
-
-        for index, page_text in enumerate(pages_raw):
-            page_text = page_text.strip()
-            if not page_text:
-                continue
-
-            page_type = "content"
-            type_match = re.match(r"\[(\S+)\]", page_text)
-            if type_match:
-                type_cn = type_match.group(1)
-                type_mapping = {
-                    "封面": "cover",
-                    "内容": "content",
-                    "总结": "summary",
-                }
-                page_type = type_mapping.get(type_cn, "content")
-
-            pages.append({
-                "index": index,
-                "type": page_type,
-                "content": page_text
-            })
-
-        return pages
-    
-    def _generate_title_content_tags(self, outline_text: str) -> Dict[str, Any]:
+    def _generate_title_content_tags(self, topic: str, max_retries: int = 5) -> Dict[str, Any]:
         """
-        使用LLM根据大纲生成标题、正文和标签（带重试机制）
+        使用LLM根据主题直接生成标题、正文和标签（带重试和长度验证机制）
         
         Args:
-            outline_text: 完整的大纲文本
+            topic: 用户主题
+            max_retries: 最大重试次数（如果超出长度限制会重新生成）
             
         Returns:
             包含 title、content、tags 的字典
@@ -135,18 +81,24 @@ class OutlineService:
         temperature = self.provider_config.get('temperature', 0.3)
         max_output_tokens = self.provider_config.get('max_output_tokens', 2000)
         
-        # 最多重试3次
-        max_retries = 3
+        # 长度限制
+        MAX_TITLE_LENGTH = 20
+        MAX_CONTENT_LENGTH = 1000
+        
         last_error = None
         
         for attempt in range(max_retries):
             try:
                 logger.info(f"使用LLM生成标题、正文和标签（尝试 {attempt + 1}/{max_retries}）...")
                 
-                # 构建提示词（使用replace避免outline_text中的{}被format解析）
+                # 构建提示词（使用replace避免topic中的{}被format解析）
                 prompt = self.title_content_tags_prompt_template.replace(
-                    "{outline_text}", outline_text
+                    "{topic}", topic
                 )
+                
+                # 如果不是第一次尝试，在提示词中强调长度限制
+                if attempt > 0:
+                    prompt += f"\n\n**重要提醒**：标题必须严格控制在{MAX_TITLE_LENGTH}字符以内，正文必须严格控制在{MAX_CONTENT_LENGTH}字符以内。"
                 
                 generated_text = self.client.generate_text(
                     prompt=prompt,
@@ -209,6 +161,30 @@ class OutlineService:
                 if not title and not content:
                     raise ValueError("生成的标题和正文都为空")
                 
+                # 验证长度限制
+                title_length = len(title)
+                content_length = len(content)
+                
+                if title_length > MAX_TITLE_LENGTH or content_length > MAX_CONTENT_LENGTH:
+                    logger.warning(
+                        f"生成内容超出限制（尝试 {attempt + 1}/{max_retries}）- "
+                        f"标题: {title_length}/{MAX_TITLE_LENGTH}, 正文: {content_length}/{MAX_CONTENT_LENGTH}，"
+                        f"将重新生成..."
+                    )
+                    if attempt < max_retries - 1:
+                        # 继续下一次循环，重新生成
+                        continue
+                    else:
+                        # 最后一次仍然超出限制，直接报错
+                        error_msg = (
+                            f"生成内容超出限制（已重试{max_retries}次）- "
+                            f"标题: {title_length}/{MAX_TITLE_LENGTH}字符, "
+                            f"正文: {content_length}/{MAX_CONTENT_LENGTH}字符。"
+                            f"请检查提示词或调整模型参数。"
+                        )
+                        logger.error(error_msg)
+                        raise ValueError(error_msg)
+                
                 logger.info(f"LLM生成成功（尝试 {attempt + 1}/{max_retries}）- 标题: {len(title)}字符, 正文: {len(content)}字符, 标签: {len(tags)}个")
                 
                 return {
@@ -246,249 +222,34 @@ class OutlineService:
         # 所有重试都失败
         logger.error(f"使用LLM生成标题、正文和标签失败（已重试{max_retries}次）: {last_error}")
         raise Exception(f"生成标题、正文和标签失败（已重试{max_retries}次）: {last_error}")
-    
-    def _compress_content(
-        self,
-        title: str,
-        content: str,
-        max_title_length: int = 20,
-        max_content_length: int = 1000
-    ) -> Dict[str, str]:
-        """
-        使用LLM压缩标题和正文内容
-        
-        Args:
-            title: 原始标题
-            content: 原始正文
-            max_title_length: 标题最大长度
-            max_content_length: 正文最大长度
-            
-        Returns:
-            包含压缩后的 title 和 content 的字典
-        """
-        try:
-            title_length = len(title)
-            content_length = len(content)
-            
-            # 构建压缩提示词
-            prompt = self.compress_prompt_template.format(
-                title=title,
-                content=content,
-                max_title_length=max_title_length,
-                max_content_length=max_content_length,
-                title_length=title_length,
-                content_length=content_length
-            )
-            
-            # 从配置中获取模型参数
-            model = self.provider_config.get('model', 'gemini-2.0-flash-exp')
-            temperature = self.provider_config.get('temperature', 0.3)
-            max_output_tokens = 1000  # 压缩任务输出较短，设置为1000
-            
-            logger.info(f"开始压缩内容 - 标题: {title_length}字符, 正文: {content_length}字符")
-            compressed_text = self.client.generate_text(
-                prompt=prompt,
-                model=model,
-                temperature=temperature,
-                max_output_tokens=max_output_tokens
-            )
-            logger.info(f"压缩结果: {compressed_text}")
-            # 解析压缩结果
-            compressed_title = title
-            compressed_content = content
-            
-            # 尝试多种格式解析
-            # 格式1: 标题：xxx\n正文：xxx
-            title_match = re.search(r'标题[：:]\s*(.+?)(?:\n\s*正文[：:]|$)', compressed_text, re.MULTILINE | re.DOTALL)
-            if title_match:
-                compressed_title = title_match.group(1).strip()
-            
-            # 格式2: 正文：xxx（可能在标题后面或单独出现）
-            content_match = re.search(r'正文[：:]\s*(.+?)(?:\n*$)', compressed_text, re.MULTILINE | re.DOTALL)
-            if content_match:
-                compressed_content = content_match.group(1).strip()
-            
-            # 格式3: 如果只有标题行，尝试提取第一行作为标题
-            if compressed_title == title and '标题' not in compressed_text.lower():
-                # 可能LLM只返回了压缩后的标题，没有格式标记
-                lines = compressed_text.strip().split('\n')
-                if lines:
-                    first_line = lines[0].strip()
-                    # 如果第一行看起来像标题（长度合理且不包含"正文"）
-                    if len(first_line) <= max_title_length * 2 and '正文' not in first_line:
-                        compressed_title = first_line
-                        # 剩余部分作为正文
-                        if len(lines) > 1:
-                            compressed_content = '\n'.join(lines[1:]).strip()
-            
-            # 如果标题仍然超过限制，只压缩标题
-            if len(compressed_title) > max_title_length:
-                # 只压缩标题，不压缩正文
-                title_only_prompt = f"请将以下标题压缩到{max_title_length}字符以内，保持核心意思：\n{title}"
-                try:
-                    compressed_title_text = self.client.generate_text(
-                        prompt=title_only_prompt,
-                        model=model,
-                        temperature=temperature,
-                        max_output_tokens=500
-                    )
-                    compressed_title = compressed_title_text.strip()[:max_title_length]
-                except:
-                    compressed_title = title[:max_title_length]
-            
-            # 如果正文仍然超过限制，只压缩正文
-            if len(compressed_content) > max_content_length:
-                # 只压缩正文，不压缩标题
-                content_only_prompt = f"请将以下正文压缩到{max_content_length}字符以内，保持核心信息和价值：\n{content}"
-                try:
-                    compressed_content_text = self.client.generate_text(
-                        prompt=content_only_prompt,
-                        model=model,
-                        temperature=temperature,
-                        max_output_tokens=1000
-                    )
-                    compressed_content = compressed_content_text.strip()[:max_content_length]
-                except:
-                    compressed_content = content[:max_content_length]
-            
-            logger.info(f"压缩完成 - 标题: {len(compressed_title)}字符, 正文: {len(compressed_content)}字符")
-            
-            return {
-                "title": compressed_title,
-                "content": compressed_content
-            }
-            
-        except Exception as e:
-            logger.error(f"压缩内容失败: {e}")
-            raise
 
     def generate_outline(
         self,
         topic: str
     ) -> Dict[str, Any]:
         """
-        生成大纲
+        生成小红书内容（标题、正文、标签）
 
         Args:
             topic: 主题
 
         Returns:
-            包含大纲信息的字典
+            包含标题、正文、标签的字典
         """
         try:
-            logger.info(f"开始生成大纲: topic={topic[:50]}...")
-            prompt = self.outline_prompt_template.format(topic=topic)
-
-            # 从配置中获取模型参数
-            model = self.provider_config.get('model', 'gemini-2.0-flash-exp')
-            temperature = self.provider_config.get('temperature', 1.0)
-            max_output_tokens = self.provider_config.get('max_output_tokens', 8000)
-
-            logger.info(f"调用文本生成 API: model={model}, temperature={temperature}")
-
-            outline_text = self.client.generate_text(
-                prompt=prompt,
-                model=model,
-                temperature=temperature,
-                max_output_tokens=max_output_tokens
-            )
-
+            logger.info(f"开始生成内容: topic={topic[:50]}...")
             
-            logger.debug(f"API 返回文本长度: {len(outline_text)} 字符")
-            logger.error(f"[DEBUG-生成文本-立即打印] 内容: {outline_text}")
-            pages = self._parse_outline(outline_text)
-            logger.info(f"大纲解析完成，共 {len(pages)} 页")
+            # 直接使用LLM生成标题、正文和标签
+            extracted = self._generate_title_content_tags(topic)
             
-            # 使用LLM生成标题、正文和标签（替代原有的提取逻辑）
-            extracted = self._generate_title_content_tags(outline_text)
-            # 打印生成结果（使用error级别确保显示）
-            logger.error(f"[DEBUG-生成结果] 标题、正文和标签生成完成: {extracted}")
             title = extracted.get("title", "")
             content = extracted.get("content", "")
             tags = extracted.get("tags", [])
             
-            # 验证字符数限制并压缩
-            MAX_TITLE_LENGTH = 20
-            MAX_CONTENT_LENGTH = 1000
-            title_length = len(title)
-            content_length = len(content)
+            logger.info(f"生成完成 - 标题: {title[:30]}..., 正文长度: {len(content)}, 标签数: {len(tags)}")
             
-            need_compress = title_length > MAX_TITLE_LENGTH or content_length > MAX_CONTENT_LENGTH
-            
-            if need_compress:
-                logger.info(f"内容超过限制 - 标题: {title_length}/{MAX_TITLE_LENGTH}, 正文: {content_length}/{MAX_CONTENT_LENGTH}，开始压缩...")
-                
-                # 最多重试3次
-                max_retries = 3
-                compressed_title = title
-                compressed_content = content
-                
-                for attempt in range(max_retries):
-                    try:
-                        # 尝试压缩
-                        compressed = self._compress_content(
-                            title=compressed_title,
-                            content=compressed_content,
-                            max_title_length=MAX_TITLE_LENGTH,
-                            max_content_length=MAX_CONTENT_LENGTH
-                        )
-                        
-                        compressed_title = compressed.get("title", compressed_title)
-                        compressed_content = compressed.get("content", compressed_content)
-                        
-                        # 验证压缩结果
-                        new_title_length = len(compressed_title)
-                        new_content_length = len(compressed_content)
-                        
-                        if new_title_length <= MAX_TITLE_LENGTH and new_content_length <= MAX_CONTENT_LENGTH:
-                            logger.info(f"压缩成功 (尝试 {attempt + 1}/{max_retries}) - 标题: {new_title_length}, 正文: {new_content_length}")
-                            title = compressed_title
-                            content = compressed_content
-                            break
-                        else:
-                            logger.warning(f"压缩后仍超过限制 (尝试 {attempt + 1}/{max_retries}) - 标题: {new_title_length}/{MAX_TITLE_LENGTH}, 正文: {new_content_length}/{MAX_CONTENT_LENGTH}")
-                            if attempt == max_retries - 1:
-                                # 第三次仍超过限制，直接截断
-                                logger.warning(f"第 {max_retries} 次压缩后仍超过限制，直接截断")
-                                if new_title_length > MAX_TITLE_LENGTH:
-                                    compressed_title = compressed_title[:MAX_TITLE_LENGTH]
-                                    logger.info(f"标题截断: {new_title_length} -> {len(compressed_title)} 字符")
-                                if new_content_length > MAX_CONTENT_LENGTH:
-                                    compressed_content = compressed_content[:MAX_CONTENT_LENGTH]
-                                    logger.info(f"正文截断: {new_content_length} -> {len(compressed_content)} 字符")
-                                title = compressed_title
-                                content = compressed_content
-                                break
-                            # 继续重试
-                            continue
-                    
-                    except Exception as e:
-                        logger.error(f"压缩失败 (尝试 {attempt + 1}/{max_retries}): {e}")
-                        if attempt == max_retries - 1:
-                            # 最后一次失败，直接截断
-                            logger.warning("所有压缩尝试失败，使用截断方式")
-                            if len(compressed_title) > MAX_TITLE_LENGTH:
-                                compressed_title = compressed_title[:MAX_TITLE_LENGTH]
-                                logger.info(f"标题截断: {len(compressed_title)} 字符")
-                            if len(compressed_content) > MAX_CONTENT_LENGTH:
-                                compressed_content = compressed_content[:MAX_CONTENT_LENGTH]
-                                logger.info(f"正文截断: {len(compressed_content)} 字符")
-                            title = compressed_title
-                            content = compressed_content
-                            break
-                        continue
-                
-                # 更新最终结果
-                title = compressed_title
-                content = compressed_content
-                logger.info(f"最终结果 - 标题: {len(title)}字符, 正文: {len(content)}字符")
-            
-            logger.info(f"提取结果 - 标题: {title[:30]}..., 正文长度: {len(content)}, 标签数: {len(tags)}")
-            logger.error(f"[DEBUG-最终结果] pages: {pages}")
             return {
                 "success": True,
-                "outline": outline_text,
-                "pages": pages,
                 "title": title,
                 "content": content,
                 "tags": tags

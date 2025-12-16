@@ -9,7 +9,7 @@ from .clients import WanT2IClient, GoogleGenAIClient, ZImageClient
 from .config import settings
 from .prompts import register_prompts
 from .resources import register_resources, register_resource_templates
-from .services import ImageGenerationService, generate_mock_images
+from .services import ImageGenerationService
 
 # 创建 MCP 应用实例
 mcp = FastMCP("Image Video MCP")
@@ -26,41 +26,39 @@ register_prompts(mcp)
 
 @mcp.tool()
 async def generate_images_batch(
-    pages: list,
-    full_outline: str = "",
-    user_topic: str = "",
+    full_content: str,
+    style: str = "",
     max_wait_time: int = 600,
 ) -> dict:
     """
-    批量生成小红书风格的图片
+    根据完整内容生成小红书风格的图片
     
-    根据页面列表批量生成小红书风格的图文内容图片。使用小红书风格的 prompt 模板，
-    先生成封面页，然后使用封面作为参考生成其他页面，确保所有页面风格统一。
+    根据完整内容文本，使用 LLM 生成图片提示词，然后批量生成小红书风格的图文内容图片。
+    使用小红书风格的 prompt 模板，确保生成的图片风格统一。
     
     生成流程：
-    1. 先生成封面页（如果存在）
-    2. 使用封面作为参考，生成其他内容页
+    1. 使用 LLM 根据完整内容生成图片提示词（可能生成一张或多张图片的提示词）
+    2. 根据生成的提示词批量生成图片
     3. 直接返回图片 URL，不保存到本地
     
     Args:
-        pages: 页面列表，必需参数。每个页面是一个字典，包含以下字段：
-            - index (int): 页面索引，从 0 开始，必须唯一且连续
-            - type (str): 页面类型，可选值：
-                * "cover" - 封面页，通常包含标题和主要视觉元素
-                * "content" - 内容页，包含具体的信息和说明
-                * "summary" - 总结页，包含总结性内容
-            - content (str): 页面内容文本，这是生成图片的主要依据
-              示例: "如何在家做拿铁\n1. 准备咖啡豆\n2. 磨豆\n3. 冲泡"
+        full_content: 完整的内容文本，必需参数。
+            这是生成图片的主要依据，可以是标题、正文、标签等完整内容。
+            示例: "标题：如何在家做拿铁\n\n正文：分享几个实用技巧\n\n✅ 核心要点：\n- 准备咖啡豆\n- 磨豆\n- 冲泡\n\n💡 注意事项：\n选择适合的咖啡豆很重要"
         
-        full_outline: 完整的内容大纲文本，可选参数，默认为空字符串。
-            用于保持所有页面风格一致。建议传入完整的大纲内容，
-            这样生成的图片在配色、设计风格、视觉元素上会更加统一。
-            示例: "1. 封面：如何在家做拿铁\n2. 准备材料\n3. 制作步骤\n4. 注意事项"
-        
-        user_topic: 用户的原始需求或主题，可选参数，默认为空字符串。
-            用于保持生成图片的意图一致。建议传入用户最初提出的主题或需求，
-            这样生成的图片能更好地符合用户的预期。
-            示例: "咖啡制作教程" 或 "秋季显白美甲"
+        style: 图片风格，可选参数，默认为空字符串。
+            用户可以指定图片风格，如"真实"、"动漫"、"哥特"、"简约"、"复古"等。
+            风格可以是单个词语或描述性句子，例如：
+            - "真实"：生成真实场景风格的图片
+            - "动漫风格"：生成动漫风格的图片
+            - "哥特式暗黑风格"：生成哥特式暗黑风格的图片
+            - "萝莉风格"：生成萝莉风格的图片
+            - "御姐风格"：生成御姐风格的图片
+            - "女王风格"：生成女王风格的图片
+            - "萝莉风格"：生成萝莉风格的图片
+            - "萝莉风格"：生成萝莉风格的图片
+            - "清新简约的日系风格"：生成清新简约的日系风格图片
+            如果不提供此参数或为空字符串，LLM 会根据内容自动选择最合适的风格。
         
         max_wait_time: 最大等待时间（秒），可选参数，默认 600 秒（10分钟）。
             Z-Image 为同步调用，此参数暂未使用。
@@ -81,32 +79,40 @@ async def generate_images_batch(
     
     Example:
         ```python
+        # 不指定风格，LLM 自动选择
         result = await generate_images_batch(
-            pages=[
-                {"index": 0, "type": "cover", "content": "如何在家做拿铁"},
-                {"index": 1, "type": "content", "content": "1. 准备咖啡豆\n2. 磨豆"},
-                {"index": 2, "type": "content", "content": "3. 冲泡\n4. 拉花"},
-            ],
-            full_outline="完整的咖啡制作教程大纲",
-            user_topic="咖啡制作教程"
+            full_content="标题：如何在家做拿铁\n\n正文：分享几个实用技巧\n\n✅ 核心要点：\n- 准备咖啡豆\n- 磨豆\n- 冲泡"
+        )
+        
+        # 指定风格为"真实"
+        result = await generate_images_batch(
+            full_content="标题：如何在家做拿铁\n\n正文：分享几个实用技巧",
+            style="真实"
+        )
+        
+        # 指定风格为"动漫风格"
+        result = await generate_images_batch(
+            full_content="标题：如何在家做拿铁\n\n正文：分享几个实用技巧",
+            style="动漫风格"
+        )
+        
+        # 指定详细风格描述
+        result = await generate_images_batch(
+            full_content="标题：如何在家做拿铁\n\n正文：分享几个实用技巧",
+            style="清新简约的日系风格，温暖色调"
         )
         ```
     """
     try:
-        # Mock 模式：直接返回固定的图片文件（通过环境变量 USE_MOCK 控制）
-        if settings.use_mock:
-            logger.info("使用 Mock 模式：直接返回固定的图片文件")
-            return generate_mock_images(pages)
-
         # 正常模式：调用实际的图片生成服务
-        # 创建图片生成服务（自动初始化通义千问客户端用于 LLM 预处理）
+        # 创建图片生成服务（自动初始化通义千问客户端用于生成图片提示词）
         service = ImageGenerationService(auto_init_qwen=True)
 
         # 批量生成图片（默认使用 Z-Image）
-        result = await service.generate_images(
-            pages=pages,
-            full_outline=full_outline,
-            user_topic=user_topic,
+        # 会根据 full_content 生成图片提示词
+        result = await service.generate_images_from_content(
+            full_content=full_content,
+            style=style,
             max_wait_time=max_wait_time,
         )
 
