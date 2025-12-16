@@ -1,0 +1,119 @@
+# 路由配置文件
+# 定义系统的路由规则
+
+routes:
+  # 小红书内容生成路由
+  - route_id: "xhs_content_route"
+    name: "小红书内容生成"
+    description: "处理小红书内容生成请求"
+    enabled: true
+    
+    # 触发条件
+    triggers:
+      - type: "keyword"
+        keywords:
+          - "小红书"
+          - "笔记"
+          - "发布"
+          - "写一篇"
+        case_sensitive: false
+        match_mode: "any"
+        enabled: true
+        weight: 1.0
+      
+      - type: "regex"
+        patterns:
+          - "生成.*内容"
+          - "帮我.*写"
+        enabled: true
+        weight: 0.8
+    
+    # 路由规则（按优先级排序）
+    rules:
+      - rule_id: "xhs_explicit"
+        name: "明确的小红书请求"
+        condition: "message contains \"小红书\""
+        target: "xhs_agent"
+        priority: 100
+        enabled: true
+      
+      - rule_id: "content_generation"
+        name: "内容生成请求"
+        condition: "message contains \"生成\" or message contains \"写\""
+        target: "xhs_agent"
+        priority: 80
+        enabled: true
+      
+      - rule_id: "default"
+        name: "默认规则"
+        condition: "default"
+        target: "xhs_agent"
+        priority: 50
+        enabled: true
+    
+    # 路由策略
+    strategy: "single"
+    
+    # 目标节点
+    target_nodes:
+      - "xhs_agent"
+    
+    # 回退节点
+    fallback: "wait"
+    
+    # 超时设置
+    timeout: 300
+
+  # 查询状态路由
+  - route_id: "query_route"
+    name: "状态查询"
+    description: "处理状态查询请求"
+    enabled: true
+    
+    triggers:
+      - type: "keyword"
+        keywords:
+          - "状态"
+          - "查询"
+          - "进度"
+        case_sensitive: false
+        enabled: true
+    
+    rules:
+      - rule_id: "query_status"
+        condition: "default"
+        target: "query_agent"
+        priority: 100
+        enabled: true
+    
+    strategy: "single"
+    target_nodes:
+      - "query_agent"
+    fallback: "wait"
+
+  # 闲聊路由
+  - route_id: "chat_route"
+    name: "闲聊对话"
+    description: "处理闲聊请求"
+    enabled: true
+    
+    triggers:
+      - type: "keyword"
+        keywords:
+          - "你好"
+          - "嗨"
+          - "hello"
+        case_sensitive: false
+        enabled: true
+    
+    rules:
+      - rule_id: "greeting"
+        condition: "default"
+        target: "wait"
+        priority: 100
+        enabled: true
+    
+    strategy: "single"
+    target_nodes: []
+    fallback: "wait"
+

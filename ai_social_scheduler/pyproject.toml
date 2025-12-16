@@ -31,6 +31,7 @@ dependencies = [
     "grandalf>=0.8",
     "langgraph-supervisor>=0.0.31",
     "langchain-mcp-adapters>=0.1.13",
+    "pyyaml>=6.0.0",
 ]
 
 [build-system]

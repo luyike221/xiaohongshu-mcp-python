@@ -107,11 +107,19 @@ class ImageVideoMCPService:
                     self._generate_image_with_google_genai_tool = tool
                 elif tool.name == "generate_images_batch":
                     self._generate_images_batch_tool = tool
+                    # 如果没有 generate_image，使用 generate_images_batch 作为替代
+                    if not self._generate_image_tool:
+                        self._generate_image_tool = tool
+                        self.logger.info("Using generate_images_batch as generate_image")
                 elif tool.name == "generate_video":
                     self._generate_video_tool = tool
             
-            if not self._generate_images_batch_tool:
-                raise ValueError("generate_images_batch tool not found in MCP tools")
+            if not self._generate_image_tool:
+                available_tools = [tool.name for tool in tools]
+                raise ValueError(
+                    f"Image generation tool not found in MCP tools. "
+                    f"Available tools: {available_tools}"
+                )
             
             self._initialized = True
             self.logger.info("Image Video MCP Service initialized successfully")

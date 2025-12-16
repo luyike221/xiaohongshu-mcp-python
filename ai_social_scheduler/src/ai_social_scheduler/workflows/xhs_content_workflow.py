@@ -1,19 +1,16 @@
-"""根据简介生成小红书内容工具
+"""小红书内容生成工作流
 
-基于 test_content_publish.py 的工作流，封装为 LangChain tool
+包含完整的内容生成、图片生成和发布流程
 """
 
-import asyncio
 from typing import Any, Optional
 
-from langchain_core.tools import tool
-
-from ...mcp.xhs import (
+from ..mcp.xhs import (
     create_xhs_content_generator_service,
     create_image_video_mcp_service,
     create_xiaohongshu_browser_mcp_service,
 )
-from ..logging import get_logger
+from ..tools.logging import get_logger
 
 logger = get_logger(__name__)
 
@@ -42,7 +39,7 @@ async def _get_services():
     return _content_service, _image_service, _publish_service
 
 
-async def _generate_content_workflow(
+async def generate_xhs_content_workflow(
     description: str,
     image_count: int = 3,
     publish: bool = True,
@@ -55,7 +52,12 @@ async def _generate_content_workflow(
         publish: 是否发布到小红书，默认True
     
     Returns:
-        包含生成结果的字典
+        包含生成结果的字典：
+        - success: 是否成功
+        - content: 生成的内容（title, content, tags）
+        - images: 生成的图片URL列表
+        - publish: 发布结果（如果publish=True）
+        - error: 错误信息（如果失败）
     """
     try:
         # 获取服务
@@ -96,23 +98,13 @@ async def _generate_content_workflow(
             if image_result.get('success'):
                 image_urls = [img.get('url') for img in image_result.get('images', []) if img.get('url')]
         else:
-            # 如果没有 pages，构造 pages 使用批量生成接口
-            constructed_pages = [
-                {
-                    "index": i,
-                    "type": "content",
-                    "content": f"{description} - 图片{i+1}"
-                }
-                for i in range(image_count)
-            ]
-            image_result = await image_service.generate_images_batch(
-                pages=constructed_pages,
-                full_outline=content_result.get('outline', '') or description,
-                user_topic=description,
-                max_wait_time=600,
-            )
-            if image_result.get('success'):
-                image_urls = [img.get('url') for img in image_result.get('images', []) if img.get('url')]
+            # 单个生成
+            for i in range(image_count):
+                image_result = await image_service.generate_image(
+                    prompt=f"{description} - 图片{i+1}",
+                )
+                if image_result.get('success') and image_result.get('url'):
+                    image_urls.append(image_result['url'])
         
         result = {
             "success": True,
@@ -136,12 +128,6 @@ async def _generate_content_workflow(
             )
             result["publish"] = publish_result
             result["success"] = publish_result.get("success", False)
-            # 如果发布失败，传递错误信息
-            if not result["success"]:
-                # 优先使用 error 字段，其次使用 message 字段
-                error_msg = publish_result.get("error") or publish_result.get("message") or "发布失败，原因未知"
-                result["error"] = error_msg
-                logger.error("Publish failed", error=error_msg, publish_result=publish_result)
         elif publish and not image_urls:
             result["success"] = False
             result["error"] = "没有可用的图片，无法发布"
@@ -154,55 +140,4 @@ async def _generate_content_workflow(
             "success": False,
             "error": f"工作流执行失败: {str(e)}",
         }
-
-
-@tool
-def generate_content_from_description(
-    description: str,
-    image_count: int = 3,
-    publish: bool = True,
-) -> str:
-    """根据简介生成小红书内容
-    
-    这个工具可以根据用户提供的简介，自动生成小红书内容（包括标题、正文、标签），
-    生成相应的配图，并可选择是否发布到小红书平台。
-    
-    Args:
-        description: 内容简介/描述，例如："我想发布一篇关于家常菜制作的图文笔记，主题是红烧肉的做法"
-        image_count: 需要生成的图片数量，默认为3张
-        publish: 是否发布到小红书平台，默认为True
-    
-    Returns:
-        JSON格式的字符串，包含：
-        - success: 是否成功
-        - content: 生成的内容（title, content, tags）
-        - images: 生成的图片URL列表
-        - publish: 发布结果（如果publish=True）
-        - error: 错误信息（如果失败）
-    
-    Example:
-        result = generate_content_from_description(
-            description="分享一道简单易做的家常菜",
-            image_count=3,
-            publish=True
-        )
-    """
-    import json
-    
-    # 由于 tool 装饰器不支持 async，我们需要在同步函数中运行异步代码
-    try:
-        loop = asyncio.get_event_loop()
-    except RuntimeError:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-    
-    result = loop.run_until_complete(
-        _generate_content_workflow(
-            description=description,
-            image_count=image_count,
-            publish=publish,
-        )
-    )
-    
-    return json.dumps(result, ensure_ascii=False, indent=2)
 

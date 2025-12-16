@@ -1,0 +1,137 @@
+# 节点配置文件
+# 定义系统中所有可用的节点
+
+nodes:
+  # 小红书 Agent 节点
+  - node_id: "xhs_agent"
+    name: "小红书内容生成Agent"
+    description: "生成小红书笔记内容、图片，并支持发布"
+    node_type: "agent"
+    
+    # 实现类
+    class_name: "XHSAgent"
+    module_path: "ai_social_scheduler.agents.xhs_agent"
+    
+    # 能力描述
+    capabilities:
+      - type: "content_generation"
+        name: "内容生成"
+        description: "生成小红书笔记标题和正文"
+        required: true
+      
+      - type: "image_generation"
+        name: "图片生成"
+        description: "生成配图"
+        required: false
+      
+      - type: "publishing"
+        name: "发布"
+        description: "发布到小红书平台"
+        required: false
+    
+    # 执行配置
+    executor:
+      max_concurrency: 3
+      timeout: 300
+      retry_limit: 3
+      retry_delay: 1
+      retry_backoff: 2.0
+      enable_circuit_breaker: false
+    
+    # 中间件
+    middlewares:
+      - "logging"
+      - "retry"
+    
+    # 资源限制
+    resources:
+      memory_limit: "2GB"
+      cpu_limit: 2
+      gpu_required: false
+    
+    # 健康检查
+    health_check:
+      enabled: true
+      interval: 60
+      timeout: 10
+      failure_threshold: 3
+      success_threshold: 1
+    
+    # 状态
+    status: "active"
+    
+    # 配置参数
+    config:
+      llm_model: "qwen-plus"
+      temperature: 0.7
+      max_images: 3
+    
+    # 标签
+    tags:
+      - "content"
+      - "xhs"
+      - "generation"
+
+  # 查询 Agent 节点（暂时禁用，等待实现）
+  - node_id: "query_agent"
+    name: "查询Agent"
+    description: "处理状态查询请求"
+    node_type: "agent"
+    status: "disabled"
+    
+    class_name: "QueryAgent"
+    module_path: "ai_social_scheduler.agents.query_agent"
+    
+    capabilities:
+      - type: "query"
+        name: "查询"
+        description: "查询任务状态和系统信息"
+        required: true
+    
+    executor:
+      max_concurrency: 10
+      timeout: 30
+      retry_limit: 2
+    
+    middlewares:
+      - "logging"
+    
+    status: "active"
+    
+    tags:
+      - "query"
+      - "utility"
+
+  # Router 节点
+  - node_id: "router"
+    name: "智能路由器"
+    description: "分析用户意图并路由到相应节点"
+    node_type: "router"
+    
+    class_name: "RouterAgent"
+    module_path: "ai_social_scheduler.agents.router"
+    
+    capabilities:
+      - type: "query"
+        name: "意图分析"
+        description: "分析用户意图"
+        required: true
+    
+    executor:
+      max_concurrency: 20
+      timeout: 10
+      retry_limit: 1
+    
+    middlewares:
+      - "logging"
+    
+    status: "active"
+    
+    config:
+      llm_model: "qwen-plus"
+      temperature: 0.3
+    
+    tags:
+      - "router"
+      - "core"
+

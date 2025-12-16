@@ -1,44 +1,41 @@
-"""小红书运营 Agent 主包
+"""小红书运营 AI Agent - 新架构
 
 主要组件：
-- SocialSchedulerGraph: LangGraph 工作流图
-- ConversationRunner: 简化的对话运行器
-- RouterAgent: 路由决策 Agent
-- XHSAgentNode: 小红书内容生成节点
+- SocialSchedulerApp: 应用主入口
+- RouterSystem: 智能路由系统
+- NodeRegistry: 节点注册表
+- Orchestrator: 任务调度器
+
+使用示例：
+    from ai_social_scheduler import SocialSchedulerApp
+    
+    app = SocialSchedulerApp()
+    await app.initialize()
+    response = await app.chat("你好", thread_id="user_001")
 """
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"  # 新架构版本
 
-# 导出核心组件
+# 导出新架构核心组件
+from .app import SocialSchedulerApp
 from .core import (
-    AgentState,
-    ConversationRunner,
-    SocialSchedulerGraph,
-    create_graph,
-    get_compiled_graph,
-)
-from .agents import (
-    RouterAgent,
-    XHSAgentNode,
-    create_router_agent,
-    create_xhs_agent_node,
+    IntentType,
+    NextAgent,
+    RouterDecision,
+    TaskContext,
+    TaskStatus,
 )
 
 __all__ = [
     # 版本
     "__version__",
-    # 图
-    "SocialSchedulerGraph",
-    "create_graph",
-    "get_compiled_graph",
-    # 对话运行器
-    "ConversationRunner",
-    # 状态
-    "AgentState",
-    # Agents
-    "RouterAgent",
-    "XHSAgentNode",
-    "create_router_agent",
-    "create_xhs_agent_node",
+    # 应用
+    "SocialSchedulerApp",
+    # 枚举
+    "NextAgent",
+    "TaskStatus",
+    "IntentType",
+    # 模型
+    "RouterDecision",
+    "TaskContext",
 ]
-
