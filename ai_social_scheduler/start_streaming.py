@@ -21,8 +21,46 @@ from ai_social_scheduler.tools.logging import get_logger
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
+from contextlib import asynccontextmanager
 
 logger = get_logger(__name__)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """应用生命周期管理"""
+    # 启动时初始化
+    logger.info("Initializing AI Social Scheduler...")
+    
+    # 创建调度器应用
+    scheduler_app = SocialSchedulerApp(
+        router_strategy=RouterStrategy.RULE_FIRST
+    )
+    
+    # 初始化
+    await scheduler_app.initialize()
+    
+    # 创建流式执行器
+    streaming_executor = StreamingGraphExecutor(
+        compiled_graph=scheduler_app.graph_executor.graph
+    )
+    
+    # 保存到应用状态
+    app.state.scheduler_app = scheduler_app
+    app.state.streaming_executor = streaming_executor
+    
+    # 注册流式路由
+    streaming_router = create_streaming_router(
+        executor=streaming_executor
+    )
+    app.include_router(streaming_router)
+    
+    logger.info("✅ Application initialized successfully")
+    
+    yield
+    
+    # 关闭时清理（如果需要）
+    logger.info("Shutting down...")
 
 
 def create_app() -> FastAPI:
@@ -31,6 +69,7 @@ def create_app() -> FastAPI:
         title="AI Social Scheduler - 流式 API",
         description="支持实时展示 Graph 处理流程的 API",
         version="2.0.0",
+        lifespan=lifespan,
     )
     
     # CORS 配置
@@ -41,40 +80,6 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
-    
-    # 存储应用实例
-    app.state.scheduler_app = None
-    app.state.streaming_executor = None
-    
-    @app.on_event("startup")
-    async def startup_event():
-        """启动时初始化"""
-        logger.info("Initializing AI Social Scheduler...")
-        
-        # 创建调度器应用
-        scheduler_app = SocialSchedulerApp(
-            router_strategy=RouterStrategy.RULE_FIRST
-        )
-        
-        # 初始化
-        await scheduler_app.initialize()
-        
-        # 创建流式执行器
-        streaming_executor = StreamingGraphExecutor(
-            compiled_graph=scheduler_app.graph_executor.graph
-        )
-        
-        # 保存到应用状态
-        app.state.scheduler_app = scheduler_app
-        app.state.streaming_executor = streaming_executor
-        
-        # 注册流式路由
-        streaming_router = create_streaming_router(
-            executor=streaming_executor
-        )
-        app.include_router(streaming_router)
-        
-        logger.info("✅ Application initialized successfully")
     
     @app.get("/")
     async def root():
@@ -121,7 +126,7 @@ def main():
     # 从环境变量获取配置
     host = os.getenv("HOST", "0.0.0.0")
     port = int(os.getenv("PORT", "8020"))
-    log_level = os.getenv("LOG_LEVEL", "info")
+    log_level = os.getenv("LOG_LEVEL", "info").lower()  # 确保小写
     
     # 创建应用
     app = create_app()

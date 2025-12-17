@@ -1,6 +1,10 @@
-"""小红书 Agent - 基于新架构实现
+"""小红书 Agent - 基于LangGraph子图重构
 
-重构核心：继承 BaseNode，集成到新架构
+新架构：
+- 不再使用命令式workflow
+- 使用XHSWorkflowSubgraph（LangGraph子图）
+- 完全由LLM驱动决策
+- 更高的灵活性和可扩展性
 """
 
 from typing import Any
@@ -10,7 +14,7 @@ from langchain_core.messages import AIMessage
 from ..core.task import Task, TaskType
 from ..nodes import BaseNode, NodeRegistry
 from ..tools.logging import get_logger
-from ..workflows import generate_xhs_content_workflow
+from ..subgraphs import XHSWorkflowSubgraph
 
 logger = get_logger(__name__)
 
@@ -21,18 +25,26 @@ logger = get_logger(__name__)
 
 @NodeRegistry.register_node("xhs_agent")
 class XHSAgent(BaseNode):
-    """小红书内容生成 Agent
+    """小红书内容生成 Agent（基于LangGraph子图）
     
     功能：
     1. 生成小红书笔记内容（标题、正文）
     2. 生成配图
     3. 发布到小红书平台
     
-    特点：
-    - 基于 BaseNode，支持生命周期钩子
-    - 支持中间件（日志、重试等）
-    - 统一错误处理
+    新架构特点：
+    - 使用LangGraph子图进行流程编排
+    - 每个步骤由独立的Agent执行
+    - LLM自主决策工具调用
+    - 支持流式输出
+    - 灵活的条件路由
     """
+    
+    def __init__(self, *args, **kwargs):
+        """初始化节点"""
+        super().__init__(*args, **kwargs)
+        # 初始化工作流子图
+        self.workflow_subgraph = XHSWorkflowSubgraph()
     
     async def execute(self, task: Task, state: dict[str, Any]) -> dict[str, Any]:
         """执行小红书内容生成
@@ -44,27 +56,28 @@ class XHSAgent(BaseNode):
         Returns:
             更新的状态
         """
-        logger.info("XHSAgent executing", task_id=task.task_id)
+        logger.info("XHSAgent executing (using LangGraph subgraph)", task_id=task.task_id)
         
         # 1. 提取参数
         description = self._extract_description(task)
         image_count = self._extract_image_count(task)
-        publish = self._should_publish(task)
+        should_publish = self._should_publish(task)
         
         logger.info(
             "XHS content generation started",
             description=description[:50],
             image_count=image_count,
-            publish=publish
+            should_publish=should_publish
         )
         
-        # 2. 调用工作流生成内容
+        # 2. 调用LangGraph子图
         try:
-            result = await generate_xhs_content_workflow(
-                description=description,
-                image_count=image_count,
-                publish=publish,
-            )
+            result = await self.workflow_subgraph.invoke({
+                "description": description,
+                "image_count": image_count,
+                "should_publish": should_publish,
+                "messages": [],
+            })
             
             # 3. 处理结果
             if result.get("success"):
@@ -73,7 +86,7 @@ class XHSAgent(BaseNode):
                 return self._handle_failure(task, result)
         
         except Exception as e:
-            logger.error(f"XHS workflow failed: {e}", exc_info=True)
+            logger.error(f"XHS workflow subgraph failed: {e}", exc_info=True)
             return self._handle_error(task, e)
     
     # ========================================================================
@@ -133,24 +146,22 @@ class XHSAgent(BaseNode):
     # ========================================================================
     
     def _handle_success(self, task: Task, result: dict) -> dict[str, Any]:
-        """处理成功结果"""
-        content = result.get("content", {})
-        images = result.get("images", [])
-        publish_result = result.get("publish", {})
+        """处理成功结果
+        
+        新架构：从LangGraph子图结果中提取信息
+        """
+        # 提取各个步骤的结果
+        content_result = result.get("content_result", {})
+        image_result = result.get("image_result", {})
+        publish_result = result.get("publish_result", {})
         
         # 构建输出数据
         output_data = {
             "success": True,
-            "title": content.get("title", ""),
-            "content": content.get("content", ""),
-            "images_count": len(images),
-            "images": images,
+            "content_result": content_result,
+            "image_result": image_result,
+            "publish_result": publish_result if publish_result else None,
         }
-        
-        # 发布信息
-        if publish_result:
-            output_data["published"] = publish_result.get("success", False)
-            output_data["note_id"] = publish_result.get("note_id")
         
         # 标记任务完成
         task.mark_completed(output_data)
@@ -159,9 +170,8 @@ class XHSAgent(BaseNode):
         message = self._format_success_message(output_data)
         
         logger.info(
-            "XHS content generated successfully",
-            task_id=task.task_id,
-            title=output_data["title"][:30]
+            "XHS content generated successfully (via subgraph)",
+            task_id=task.task_id
         )
         
         return {
@@ -204,24 +214,28 @@ class XHSAgent(BaseNode):
         }
     
     def _format_success_message(self, output_data: dict) -> str:
-        """格式化成功消息"""
-        lines = ["✅ 小红书内容已生成"]
+        """格式化成功消息
         
-        title = output_data.get("title", "")
-        if title:
-            lines.append(f"标题：{title}")
+        新架构：从子图结果中提取消息
+        """
+        lines = ["✅ 小红书内容已生成（使用LangGraph子图）"]
         
-        images_count = output_data.get("images_count", 0)
-        if images_count > 0:
-            lines.append(f"图片：{images_count}张")
+        # 内容信息
+        content_result = output_data.get("content_result", {})
+        if content_result:
+            lines.append("✓ 内容生成完成")
         
-        if output_data.get("published"):
-            lines.append("状态：已发布")
-            note_id = output_data.get("note_id")
-            if note_id:
-                lines.append(f"笔记ID：{note_id}")
+        # 图片信息
+        image_result = output_data.get("image_result", {})
+        if image_result:
+            lines.append("✓ 图片生成完成")
+        
+        # 发布信息
+        publish_result = output_data.get("publish_result")
+        if publish_result:
+            lines.append("✓ 发布完成")
         else:
-            lines.append("状态：未发布")
+            lines.append("○ 未发布")
         
         return "\n".join(lines)
 

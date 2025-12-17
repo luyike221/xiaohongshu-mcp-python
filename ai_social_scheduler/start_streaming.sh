@@ -45,12 +45,16 @@ else
     exit 1
 fi
 
-# 检查示例文件
-echo -e "${YELLOW}[3/4] 检查示例文件...${NC}"
-if [ -f "examples/streaming_app_example.py" ]; then
+# 检查启动文件
+echo -e "${YELLOW}[3/4] 检查启动文件...${NC}"
+if [ -f "start_streaming.py" ]; then
+    echo -e "${GREEN}✓ 找到流式服务启动文件${NC}"
+    START_FILE="start_streaming.py"
+elif [ -f "examples/streaming_app_example.py" ]; then
     echo -e "${GREEN}✓ 找到流式应用示例${NC}"
+    START_FILE="examples/streaming_app_example.py"
 else
-    echo -e "${RED}✗ 未找到 examples/streaming_app_example.py${NC}"
+    echo -e "${RED}✗ 未找到启动文件${NC}"
     exit 1
 fi
 
@@ -77,8 +81,8 @@ echo ""
 
 # 启动服务
 if command -v uv &> /dev/null; then
-    uv run python examples/streaming_app_example.py
+    uv run python $START_FILE
 else
-    $PYTHON_CMD examples/streaming_app_example.py
+    $PYTHON_CMD $START_FILE
 fi
 

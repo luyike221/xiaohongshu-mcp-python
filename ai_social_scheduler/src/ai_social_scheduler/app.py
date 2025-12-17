@@ -136,7 +136,7 @@ class SocialSchedulerApp:
             checkpointer=self.state_manager.checkpointer,
         )
         
-        compiled_graph = self.graph_builder.compile()
+        compiled_graph = await self.graph_builder.compile()
         logger.info("Graph compiled")
         
         # 7. 初始化图执行器

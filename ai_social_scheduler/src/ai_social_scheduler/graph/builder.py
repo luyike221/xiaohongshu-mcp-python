@@ -95,13 +95,13 @@ class GraphBuilder:
     # 图构建
     # ========================================================================
     
-    def build(self) -> StateGraph:
-        """构建状态图
+    async def build(self) -> StateGraph:
+        """构建状态图（现在是异步的，因为需要初始化子图）
         
         Returns:
             构建好的 StateGraph（未编译）
         """
-        logger.info("Building graph...")
+        logger.info("Building graph with subgraphs as nodes...")
         
         # 创建状态图
         workflow = StateGraph(GraphState)
@@ -109,22 +109,23 @@ class GraphBuilder:
         # 1. 添加路由节点（入口）
         workflow.add_node("router", self._create_router_node())
         
-        # 2. 添加所有注册的节点
-        active_nodes = self.node_registry.list_active_nodes()
+        # 2. 添加子图作为节点（新架构：直接使用子图）
         successfully_added_nodes = []
         
-        for node_id in active_nodes:
-            # 跳过 router（已添加）
-            if node_id == "router":
-                continue
+        # 添加小红书工作流子图
+        try:
+            from ..subgraphs import XHSWorkflowSubgraph
+            xhs_subgraph = XHSWorkflowSubgraph()
             
-            try:
-                node = self.node_factory.create(node_id)
-                workflow.add_node(node_id, self._wrap_node(node))
-                successfully_added_nodes.append(node_id)
-                logger.info(f"Node added to graph: {node_id}")
-            except Exception as e:
-                logger.error(f"Failed to add node {node_id}: {e}")
+            # 初始化子图
+            await xhs_subgraph.initialize()
+            
+            # 关键：直接添加编译后的子图，让 LangGraph 自动处理流式输出
+            workflow.add_node("xhs_workflow", xhs_subgraph.graph)
+            successfully_added_nodes.append("xhs_workflow")
+            logger.info("Subgraph added to graph: xhs_workflow")
+        except Exception as e:
+            logger.error(f"Failed to add xhs_workflow subgraph: {e}")
         
         # 3. 添加等待节点
         workflow.add_node("wait", self._create_wait_node())
@@ -133,7 +134,7 @@ class GraphBuilder:
         # START -> router
         workflow.add_edge(START, "router")
         
-        # router -> 条件路由（只包含成功添加的节点）
+        # router -> 条件路由
         route_map = {node_id: node_id for node_id in successfully_added_nodes}
         route_map.update({"wait": "wait", "end": END})
         
@@ -143,7 +144,7 @@ class GraphBuilder:
             route_map
         )
         
-        # 所有成功添加的节点 -> router（完成后回到路由）
+        # 所有节点 -> router（完成后回到路由）
         for node_id in successfully_added_nodes:
             workflow.add_edge(node_id, "router")
         
@@ -151,12 +152,12 @@ class GraphBuilder:
         workflow.add_edge("wait", "router")
         
         self._graph = workflow
-        logger.info("Graph built successfully")
+        logger.info("Graph built successfully with subgraphs")
         
         return workflow
     
-    def compile(self, interrupt_before: Optional[list[str]] = None):
-        """编译图
+    async def compile(self, interrupt_before: Optional[list[str]] = None):
+        """编译图（现在是异步的）
         
         Args:
             interrupt_before: 在哪些节点前中断
@@ -165,7 +166,7 @@ class GraphBuilder:
             编译后的可执行图
         """
         if self._graph is None:
-            self.build()
+            await self.build()
         
         # 默认在 wait 前中断
         interrupt_before = interrupt_before or ["wait"]
@@ -184,11 +185,10 @@ class GraphBuilder:
         logger.info("Graph compiled successfully")
         return self._compiled_graph
     
-    @property
-    def graph(self):
-        """获取编译后的图"""
+    async def get_graph(self):
+        """获取编译后的图（异步版本）"""
         if self._compiled_graph is None:
-            self.compile()
+            await self.compile()
         return self._compiled_graph
     
     # ========================================================================
@@ -302,12 +302,16 @@ class GraphBuilder:
         
         return wrapped_node
     
+    
     # ========================================================================
     # 路由函数
     # ========================================================================
     
     def _route_from_router(self, state: GraphState) -> str:
-        """从 router 路由到下一个节点"""
+        """从 router 路由到下一个节点
+        
+        新架构：直接路由到子图节点而不是 agent 节点
+        """
         task = state.get("task")
         iteration_count = state.get("iteration_count", 0)
         
@@ -333,21 +337,25 @@ class GraphBuilder:
             return "wait"
         
         # 路由到第一个目标节点
-        next_node = task.target_nodes[0]
+        target = task.target_nodes[0]
         
-        # wait 是特殊节点，不需要检查 registry
+        # 映射旧的 agent 节点名到新的子图节点名
+        node_mapping = {
+            "xhs_agent": "xhs_workflow",
+            "xhs_content_agent": "xhs_workflow",
+        }
+        
+        next_node = node_mapping.get(target, target)
+        
+        # wait 是特殊节点
         if next_node == "wait":
             logger.info("Routing to wait node")
             return "wait"
         
-        # 检查节点是否存在
-        if not self.node_registry.has_node(next_node):
-            logger.error(f"Node not found: {next_node}")
-            return "wait"
-        
         logger.info(
-            f"Routing to node",
+            f"Routing to subgraph",
             next_node=next_node,
+            original_target=target,
             task_id=task.task_id,
             iteration=iteration_count
         )

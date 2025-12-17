@@ -2,15 +2,16 @@
 # 定义系统中所有可用的节点
 
 nodes:
-  # 小红书 Agent 节点
-  - node_id: "xhs_agent"
-    name: "小红书内容生成Agent"
-    description: "生成小红书笔记内容、图片，并支持发布"
-    node_type: "agent"
+  # 小红书工作流子图（直接作为节点）
+  # 注意：此配置主要用于路由映射，实际节点在 GraphBuilder 中动态添加
+  - node_id: "xhs_workflow"
+    name: "小红书工作流"
+    description: "完整的小红书内容生成流程（内容→图片→发布）"
+    node_type: "subgraph"
     
-    # 实现类
-    class_name: "XHSAgent"
-    module_path: "ai_social_scheduler.agents.xhs_agent"
+    # 子图不需要实现类，由 GraphBuilder 直接使用
+    class_name: "XHSWorkflowSubgraph"
+    module_path: "ai_social_scheduler.subgraphs.xhs_workflow_subgraph"
     
     # 能力描述
     capabilities:

@@ -9,7 +9,7 @@ from .clients import WanT2IClient, GoogleGenAIClient, ZImageClient
 from .config import settings
 from .prompts import register_prompts
 from .resources import register_resources, register_resource_templates
-from .services import ImageGenerationService
+from .services import ImageGenerationService, generate_mock_images
 
 # 创建 MCP 应用实例
 mcp = FastMCP("Image Video MCP")
@@ -50,13 +50,19 @@ async def generate_images_batch(
             用户可以指定图片风格，如"真实"、"动漫"、"哥特"、"简约"、"复古"等。
             风格可以是单个词语或描述性句子，例如：
             - "真实"：生成真实场景风格的图片
+            - "性感"：生成性感风格的图片
+            - "邻家"：生成邻家风格的图片
+            - "萝莉"：生成萝莉风格的图片
+            - "御姐"：生成御姐风格的图片
+            - "女王"：生成女王风格的图片
+            - "萝莉"：生成萝莉风格的图片
+            - "萝莉"：生成萝莉风格的图片
+            - "清新简约的日系风格"：生成清新简约的日系风格图片
             - "动漫风格"：生成动漫风格的图片
             - "哥特式暗黑风格"：生成哥特式暗黑风格的图片
-            - "萝莉风格"：生成萝莉风格的图片
-            - "御姐风格"：生成御姐风格的图片
-            - "女王风格"：生成女王风格的图片
-            - "萝莉风格"：生成萝莉风格的图片
-            - "萝莉风格"：生成萝莉风格的图片
+            - "二次元风格"：生成二次元风格的图片
+            - "水彩风格"：生成水彩风格的图片
+            - "风景风格"：生成风景风格的图片
             - "清新简约的日系风格"：生成清新简约的日系风格图片
             如果不提供此参数或为空字符串，LLM 会根据内容自动选择最合适的风格。
         
@@ -104,6 +110,29 @@ async def generate_images_batch(
         ```
     """
     try:
+        # 检查是否使用 Mock 模式
+        if settings.use_mock:
+            logger.info("[MOCK模式] 检测到 USE_MOCK=true，使用 Mock 模式生成图片")
+            
+            # Mock 模式：从 full_content 中提取页面信息，生成简单的 pages 列表
+            # 简单实现：根据内容长度估算页面数量（每500字符一页，至少1页）
+            content_length = len(full_content)
+            estimated_pages = max(1, (content_length // 500) + 1)
+            
+            # 生成 pages 列表
+            pages = []
+            for i in range(estimated_pages):
+                page_type = "cover" if i == 0 else "content"
+                pages.append({
+                    "index": i,
+                    "type": page_type
+                })
+            
+            logger.info(f"[MOCK模式] 生成 {len(pages)} 个页面的 Mock 数据")
+            result = generate_mock_images(pages)
+            logger.info(f"[MOCK模式] 批量图片生成完成: task_id={result['task_id']}, 成功={result['completed']}, 失败={result['failed']}")
+            return result
+        
         # 正常模式：调用实际的图片生成服务
         # 创建图片生成服务（自动初始化通义千问客户端用于生成图片提示词）
         service = ImageGenerationService(auto_init_qwen=True)

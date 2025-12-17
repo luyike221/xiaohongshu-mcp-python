@@ -44,6 +44,7 @@ def create_streaming_router(
         
         ### 事件类型
         
+        **主图事件**：
         - `started`: 开始执行
         - `node_start`: 节点开始执行
         - `node_output`: 节点输出数据
@@ -51,6 +52,13 @@ def create_streaming_router(
         - `message`: AI 消息
         - `error`: 错误
         - `completed`: 执行完成
+        
+        **子图事件**（当节点包含子图时）：
+        - `subgraph_start`: 子图开始执行
+        - `subgraph_node_start`: 子图节点开始执行
+        - `subgraph_node_output`: 子图节点输出数据
+        - `subgraph_node_end`: 子图节点执行结束
+        - `subgraph_end`: 子图执行完成
         
         ### 使用示例
         
@@ -68,6 +76,22 @@ def create_streaming_router(
         eventSource.addEventListener('node_output', (event) => {
             const data = JSON.parse(event.data);
             console.log('节点输出:', data);
+        });
+        
+        // 子图事件监听
+        eventSource.addEventListener('subgraph_start', (event) => {
+            const data = JSON.parse(event.data);
+            console.log('子图开始:', data.subgraph_name, '在节点', data.parent_node);
+        });
+        
+        eventSource.addEventListener('subgraph_node_output', (event) => {
+            const data = JSON.parse(event.data);
+            console.log('子图节点输出:', data.subgraph_node, '在', data.parent_node);
+        });
+        
+        eventSource.addEventListener('subgraph_end', (event) => {
+            const data = JSON.parse(event.data);
+            console.log('子图完成:', data.parent_node);
         });
         
         eventSource.addEventListener('completed', (event) => {
@@ -94,6 +118,21 @@ def create_streaming_router(
         
         event: node_output
         data: {"node": "router", "task": {...}, "message": {...}}
+        
+        event: subgraph_start
+        data: {"parent_node": "xhs_agent", "subgraph_name": "xhs_workflow", "timestamp": "2025-12-16T10:30:01"}
+        
+        event: subgraph_node_start
+        data: {"parent_node": "xhs_agent", "subgraph_node": "generate_content", "timestamp": "2025-12-16T10:30:02"}
+        
+        event: subgraph_node_output
+        data: {"parent_node": "xhs_agent", "subgraph_node": "generate_content", "message": {...}}
+        
+        event: subgraph_node_end
+        data: {"parent_node": "xhs_agent", "subgraph_node": "generate_content", "timestamp": "2025-12-16T10:30:03"}
+        
+        event: subgraph_end
+        data: {"parent_node": "xhs_agent", "timestamp": "2025-12-16T10:30:10"}
         
         event: completed
         data: {"thread_id": "user_123", "timestamp": "2025-12-16T10:30:05"}

@@ -16,20 +16,12 @@ mcp = FastMCP("XHS Content Generator MCP")
 @mcp.tool()
 async def generate_outline(
     topic: str,
-    provider_type: str = "alibaba_bailian",
-    model: Optional[str] = None,
-    temperature: float = 0.3,
-    max_output_tokens: int = 8000,
 ) -> dict:
     """
     生成小红书内容大纲
     
     Args:
         topic: 内容主题，例如"如何在家做拿铁"、"秋季显白美甲"等
-        provider_type: AI 服务商类型，可选值：alibaba_bailian（默认，使用阿里百炼 qwen-plus）、openai_compatible、google_gemini
-        model: 模型名称，如果不提供则使用默认值（alibaba_bailian 默认: qwen-plus）
-        temperature: 温度参数（0.0-2.0），默认 0.3
-        max_output_tokens: 最大输出 token 数，默认 8000
     
     Returns:
         包含生成结果的字典：
@@ -40,15 +32,15 @@ async def generate_outline(
         - error: 错误信息（如果失败）
     """
     try:
-        logger.info(f"生成大纲 - 主题: {topic[:50]}..., 服务商: {provider_type}")
+        logger.info(f"生成大纲 - 主题: {topic[:50]}...")
         
-        # 从配置获取服务商配置
+        # 从配置获取服务商配置（使用默认配置，max_output_tokens=2048）
         try:
             provider_config = model_config.get_provider_config(
-                provider_type=provider_type,
-                model=model,
-                temperature=temperature,
-                max_output_tokens=max_output_tokens,
+                provider_type="alibaba_bailian",
+                model=None,
+                temperature=0.3,
+                max_output_tokens=2048,
             )
         except ValueError as e:
             return {
@@ -85,10 +77,6 @@ async def generate_lifestyle_content(
     scene: Optional[str] = None,
     content_type: Optional[str] = None,
     topic_hint: Optional[str] = None,
-    provider_type: str = "alibaba_bailian",
-    model: Optional[str] = None,
-    temperature: float = 0.8,
-    max_output_tokens: int = 2000,
 ) -> dict:
     """
     生成生活化、随意、带情绪的小红书内容（包含图片生成提示词）
@@ -102,10 +90,6 @@ async def generate_lifestyle_content(
         scene: 生活场景（可选），例如"周末日常"、"工作间隙"、"深夜emo"、"旅行途中"
         content_type: 内容类型（可选），例如"日常分享"、"心情记录"、"生活感悟"、"好物推荐"
         topic_hint: 话题提示（可选），例如"今天天气真好"、"工作累了"
-        provider_type: AI 服务商类型，可选值：alibaba_bailian（默认，使用阿里百炼 qwen-plus）、openai_compatible、google_gemini
-        model: 模型名称，如果不提供则使用默认值（alibaba_bailian 默认: qwen-plus）
-        temperature: 温度参数（0.0-2.0），默认 0.8（生活化内容使用更高温度）
-        max_output_tokens: 最大输出 token 数，默认 2000
     
     Returns:
         包含生成结果的字典（对齐 outline_service 格式）：
@@ -121,13 +105,13 @@ async def generate_lifestyle_content(
     try:
         logger.info(f"生成生活化内容 - 职业: {profession}, 年龄: {age}, 性别: {gender}, 性格: {personality}, 心情: {mood}")
         
-        # 从配置获取服务商配置
+        # 从配置获取服务商配置（使用默认配置，max_output_tokens=2048）
         try:
             provider_config = model_config.get_provider_config(
-                provider_type=provider_type,
-                model=model,
-                temperature=temperature,
-                max_output_tokens=max_output_tokens,
+                provider_type="alibaba_bailian",
+                model=None,
+                temperature=0.8,
+                max_output_tokens=2048,
             )
         except ValueError as e:
             return {
