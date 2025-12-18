@@ -34,7 +34,7 @@ class MCPToolRegistry:
         content_tools = mcp_registry.get_tools_by_category("content")
         
         # 获取单个工具
-        tool = mcp_registry.get_tool("generate_outline")
+        tool = mcp_registry.get_tool("generate_xhs_note")
     """
     
     _instance: Optional["MCPToolRegistry"] = None
@@ -50,12 +50,12 @@ class MCPToolRegistry:
         self._mcp_client: Optional[MultiServerMCPClient] = None
         self._tools: Dict[str, BaseTool] = {}
         self._tools_by_category: Dict[str, List[BaseTool]] = {
-            "content": [],    # 内容生成工具
-            "image": [],      # 图片生成工具
-            "publish": [],    # 发布工具
-            "search": [],     # 搜索工具
-            "user": [],       # 用户信息工具
-            "login": [],      # 登录管理工具
+            "content": [],    # 内容类生成工具   
+            "image": [],      # 图片类生成工具
+            "publish": [],    # 发布类工具
+            "search": [],     # 搜索类工具
+            "user": [],       # 用户信息类工具
+            "login": [],      # 登录管理类工具
         }
         self._initialized = False
         self.logger = logger
@@ -122,7 +122,7 @@ class MCPToolRegistry:
         """将工具分类到对应类别
         
         分类规则：
-        - content: 内容生成相关（generate_outline, generate_content等）
+        - content: 内容生成相关（generate_xhs_note, generate_content等）
         - image: 图片/视频生成相关（generate_image, generate_video等）
         - publish: 发布相关（publish_content, publish_video等）
         - login: 登录管理相关（start_login, check_login, cleanup_login等）

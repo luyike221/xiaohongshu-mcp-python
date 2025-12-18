@@ -202,11 +202,11 @@ uv run python -m xhs_content_generator_mcp.main 8080
    - 输入服务器地址：`http://localhost:8004`
    - 点击连接
 
-3. 在 Tools 标签页中测试 `generate_outline` 工具
+3. 在 Tools 标签页中测试 `generate_xhs_note` 工具
 
 ### MCP 工具说明
 
-#### generate_outline
+#### generate_xhs_note
 
 根据主题直接生成小红书内容的标题、正文和标签。
 
@@ -251,12 +251,12 @@ uv run python -m xhs_content_generator_mcp.main 8080
 
 ```python
 # 使用默认配置（阿里百炼 qwen-plus）
-result = await generate_outline(
+result = await generate_xhs_note(
     topic="如何在家做拿铁"
 )
 
 # 使用 OpenAI 兼容接口
-result = await generate_outline(
+result = await generate_xhs_note(
     topic="秋季显白美甲",
     provider_type="openai_compatible",
     model="gpt-4o"

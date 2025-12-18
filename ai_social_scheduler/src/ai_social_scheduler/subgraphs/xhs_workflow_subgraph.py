@@ -211,12 +211,18 @@ class XHSWorkflowSubgraph(BaseSubgraph):
             # 确保Agent已初始化
             await self.content_agent.initialize()
             
-            # 构建清晰的提示 - 明确指导Agent调用工具
-            prompt = f"""请调用 generate_outline 工具为以下主题生成小红书内容：
+            # 构建清晰的提示 - 说明需求与可用工具，让 Agent 自主选择
+            prompt = f"""你是小红书内容生成助手，现在有一个创作需求：
 
 主题：{description}
 
-操作：直接调用 generate_outline(topic="{description}")"""
+请你根据用户意图，在可用工具（generate_xhs_note / generate_lifestyle_content）中选择**最合适的一个**来完成创作：
+- 如果是普通主题类、小红书图文笔记，优先考虑使用 generate_xhs_note(topic=...)
+- 如果更偏向人物设定、生活化吐槽、带强烈情绪的内容，优先考虑使用 generate_lifestyle_content(...)
+
+要求：
+1. 必须通过工具完成内容生成，不要自己写正文
+2. 工具返回什么，就原样作为最终结果返回给用户，不要修改"""
             
             # 调用内容生成Agent
             result = await self.content_agent.invoke(prompt)
@@ -256,7 +262,7 @@ class XHSWorkflowSubgraph(BaseSubgraph):
             content_result = state.get("content_result", {})
             messages = content_result.get("messages", [])
             
-            # 尝试从消息中提取 generate_outline 工具调用的结果
+            # 尝试从消息中提取 generate_xhs_note 工具调用的结果
             outline_result = self._extract_outline_result(messages)
             
             # 构建提示 - 明确传递数据给Agent
@@ -332,7 +338,7 @@ class XHSWorkflowSubgraph(BaseSubgraph):
         return state
     
     def _extract_outline_result(self, messages: list) -> dict:
-        """从消息列表中提取 generate_outline 的结果
+        """从消息列表中提取 generate_xhs_note 的结果
         
         Args:
             messages: LangChain消息列表
@@ -348,7 +354,7 @@ class XHSWorkflowSubgraph(BaseSubgraph):
         # 查找工具调用的结果（ToolMessage）
         for msg in reversed(messages):
             # 检查是否是工具消息
-            if hasattr(msg, "name") and msg.name == "generate_outline":
+            if hasattr(msg, "name") and msg.name == "generate_xhs_note":
                 if hasattr(msg, "content"):
                     content = msg.content
                     # 尝试解析为字典

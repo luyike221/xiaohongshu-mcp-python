@@ -91,7 +91,7 @@ class XHSImageAgent(BaseLangGraphAgent):
 
 ## 示例
 
-### 场景1：从generate_outline结果生成图片
+### 场景1：从 generate_xhs_note 结果生成图片
 
 用户输入：
 ```

@@ -14,17 +14,21 @@ mcp = FastMCP("XHS Content Generator MCP")
 
 
 @mcp.tool()
-async def generate_outline(
+async def generate_xhs_note(
     topic: str,
 ) -> dict:
     """
-    生成小红书内容大纲
+    生成完整的小红书内容笔记
+    
+    说明：
+        - 该工具会根据主题直接生成一篇可发布的完整小红书笔记
+        - 输出中包含标题、正文、标签等字段，可直接用于发布接口或后续流程
     
     Args:
         topic: 内容主题，例如"如何在家做拿铁"、"秋季显白美甲"等
     
     Returns:
-        包含生成结果的字典：
+        包含生成结果的字典（完整小红书内容）：
         - success: 是否成功
         - title: 生成的标题（1-20字符，匹配发布接口）
         - content: 生成的正文内容（不超过1000字符，匹配发布接口）
