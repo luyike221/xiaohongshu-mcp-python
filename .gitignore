@@ -273,3 +273,6 @@ google-chrome-stable_current_amd64.deb
 *.nef
 *.orf
 *.sr2
+
+cache/
+output/
