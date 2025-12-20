@@ -16,7 +16,7 @@
 
 ## ✨ 项目简介
 
-这是一个**完整的AI社交媒体运营解决方案**，由四个强大的项目组成，实现从内容生成、平台操作到AI智能调度的全链路自动化。
+这是一个**完整的AI社交媒体运营解决方案**，由六个强大的项目组成，实现从内容生成、图像视频创作、平台操作到AI智能调度的全链路自动化。
 
 ### 🎯 核心价值
 
@@ -47,7 +47,7 @@
 
 ## 🏗️ 项目架构
 
-本仓库包含四个独立但协同工作的项目：
+本仓库包含六个独立但协同工作的项目：
 
 ### 1️⃣ **ai_social_scheduler** - AI 调度核心层
 
@@ -91,44 +91,71 @@
 
 **适用场景**：需要直接操作小红书平台的场景
 
-### 4️⃣ **image_video_mcp** - 图像视频生成 MCP 服务层
+### 4️⃣ **xhs-image-mcp** - 图像生成 MCP 服务层
 
-**定位**：内容创作引擎，提供AI图像和视频生成能力
+**定位**：AI图像生成引擎，提供高质量图像创作能力
 
 - 🎨 **图像生成**：基于提示词生成高质量图像（支持通义万相）
-- 🎬 **视频生成**：基于提示词生成视频内容
 - 🚀 **FastMCP框架**：使用 FastMCP 快速构建 MCP 服务
 - 🔌 **MCP协议实现**：完整支持 Model Context Protocol 规范
+- 📝 **Prompt模板**：提供5个预定义的Prompt模板
+- 📦 **Resource资源**：提供6个预定义的Resource资源（风格预设、配置模板等）
+- 🎯 **Resource Template**：提供8个预定义的Resource Template模板，支持动态参数访问
 - ⚙️ **灵活配置**：支持自定义尺寸、种子、负面提示词等参数
 
-**适用场景**：需要AI生成图像或视频内容的场景
+**适用场景**：需要AI生成图像内容的场景
+
+### 5️⃣ **xhs-video-mcp** - 视频生成 MCP 服务层
+
+**定位**：视频生成引擎，借鉴 MoneyPrinterTurbo 的视频生产逻辑
+
+- 🎬 **自动生成视频脚本**：使用 LLM 生成视频脚本
+- 🔍 **自动生成搜索关键词**：智能生成视频素材搜索关键词
+- 🗣️ **文本转语音（TTS）**：支持 edge-tts，多种语音选择
+- 📝 **自动生成字幕**：自动为视频添加字幕
+- 📥 **素材下载**：从 Pexels/Pixabay 下载视频素材
+- ✂️ **视频合成**：拼接、添加字幕、背景音乐、转场效果
+- 📱 **多尺寸支持**：支持竖屏（9:16）和横屏（16:9）
+- ⚡ **GPU加速**：支持NVENC硬件编码加速
+
+**适用场景**：需要AI生成剪辑风格视频的场景
+
+### 6️⃣ **xhs-data-collector-mcp** - 数据收集 MCP 服务层
+
+**定位**：数据收集和分析引擎
+
+- 📊 **数据收集**：收集平台数据，支持运营分析
+- 🔍 **数据分析**：内容表现分析、趋势识别
+- 📈 **数据可视化**：提供数据统计和可视化功能
+
+**适用场景**：需要数据收集和分析的场景
 
 ### 🔗 协同工作
 
 ```
-┌─────────────────────────────────────────┐
-│   AI Social Scheduler (智能调度层)        │
-│   - AI决策引擎                           │
-│   - 事件监听器                           │
-│   - 任务调度器                           │
-│   - 策略管理器                           │
-└───┬──────────┬──────────┬───────────────┘
-    │ MCP协议  │ MCP协议  │ MCP协议
-    ↓          ↓          ↓
-┌──────────────┐ ┌──────────────┐ ┌────────────────────┐
-│xhs-content   │ │image_video_mcp│ │xhs-browser-auto-mcp │
-│generator     │ │(图像视频生成) │ │ (平台操作服务层)    │
-│              │ │              │ │                    │
-│- 内容生成    │ │- 图像生成     │ │- 小红书内容发布    │
-│- 文案创作    │ │- 视频生成     │ │- 内容搜索与获取    │
-│              │ │              │ │- 用户互动管理      │
-└──────────────┘ └──────────────┘ │- 账户管理          │
-                                  └────────┬───────────┘
-                                       │ 浏览器自动化
-                                       ↓
-                                 ┌──────────┐
-                                 │  小红书平台 │
-                                 └──────────┘
+┌─────────────────────────────────────────────────────────┐
+│   AI Social Scheduler (智能调度层)                        │
+│   - AI决策引擎                                           │
+│   - 事件监听器                                           │
+│   - 任务调度器                                           │
+│   - 策略管理器                                           │
+└───┬──────────┬──────────┬──────────┬──────────┬────────┘
+    │ MCP协议  │ MCP协议  │ MCP协议  │ MCP协议  │ MCP协议
+    ↓          ↓          ↓          ↓          ↓
+┌──────────────┐ ┌──────────────┐ ┌──────────────┐ ┌──────────────┐ ┌──────────────┐
+│xhs-content   │ │xhs-image-mcp │ │xhs-video-mcp  │ │xhs-browser-   │ │xhs-data-      │
+│generator     │ │(图像生成)     │ │(视频生成)     │ │automation-mcp │ │collector-mcp │
+│              │ │              │ │              │ │(平台操作)     │ │(数据收集)     │
+│- 内容生成    │ │- 图像生成     │ │- 视频脚本生成 │ │- 内容发布     │ │- 数据收集     │
+│- 文案创作    │ │- Prompt模板   │ │- TTS语音合成 │ │- 内容搜索     │ │- 数据分析     │
+│              │ │- Resource    │ │- 视频合成     │ │- 用户互动     │ │- 趋势识别     │
+└──────────────┘ └──────────────┘ └──────────────┘ │- 账户管理     │ └──────────────┘
+                                                   └────────┬────────┘
+                                                        │ 浏览器自动化
+                                                        ↓
+                                                  ┌──────────┐
+                                                  │  小红书平台 │
+                                                  └──────────┘
 ```
 
 ---
@@ -200,9 +227,15 @@
 
 3. **安装项目依赖**
 
-   **安装图像视频生成 MCP 服务：**
+   **安装图像生成 MCP 服务：**
    ```bash
-   cd image_video_mcp
+   cd xhs-image-mcp
+   uv sync
+   ```
+
+   **安装视频生成 MCP 服务：**
+   ```bash
+   cd xhs-video-mcp
    uv sync
    ```
 
@@ -219,6 +252,12 @@
    uv run playwright install chromium
    ```
 
+   **安装数据收集 MCP 服务：**
+   ```bash
+   cd xhs-data-collector-mcp
+   uv sync
+   ```
+
    **安装 AI 调度系统：**
    ```bash
    cd ai_social_scheduler
@@ -227,9 +266,9 @@
 
 ### ⚙️ 配置
 
-#### 图像视频生成 MCP 服务配置
+#### 图像生成 MCP 服务配置
 
-在 `image_video_mcp` 目录下创建 `.env` 文件：
+在 `xhs-image-mcp` 目录下创建 `.env` 文件：
 
 ```env
 # 服务器配置
@@ -239,6 +278,28 @@ MCP_PORT=8003
 # 通义万相配置（图像生成）
 WANT2I_API_KEY=your_api_key
 WANT2I_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
+```
+
+#### 视频生成 MCP 服务配置
+
+在 `xhs-video-mcp` 目录下创建 `.env` 文件：
+
+```env
+# LLM 配置
+LLM_PROVIDER=openai  # 或 moonshot, deepseek
+OPENAI_API_KEY=your_openai_api_key
+OPENAI_MODEL_NAME=gpt-3.5-turbo
+
+# 视频素材配置（多个key用逗号分隔）
+PEXELS_API_KEYS=your_pexels_api_key_1,your_pexels_api_key_2
+PIXABAY_API_KEYS=your_pixabay_api_key
+
+# 视频配置
+VIDEO_OUTPUT_DIR=./output
+MATERIAL_CACHE_DIR=./cache/materials
+VIDEO_FPS=30
+VIDEO_GPU_ACCELERATION=false  # 启用GPU加速（需要NVIDIA GPU和NVENC支持）
+VIDEO_CODEC=auto  # 视频编码器: auto, libx264, h264_nvenc, hevc_nvenc
 ```
 
 #### 小红书内容生成 MCP 服务配置
@@ -278,14 +339,30 @@ cp config/config.example.yaml config/config.yaml
 
 ### 🎯 启动服务
 
-#### 启动图像视频生成 MCP 服务
+#### 启动图像生成 MCP 服务
 
 ```bash
-cd image_video_mcp
+cd xhs-image-mcp
 uv run python -m image_video_mcp.main
 ```
 
 服务将在 `http://localhost:8003` 启动。
+
+#### 启动视频生成 MCP 服务
+
+```bash
+cd xhs-video-mcp
+# 使用启动脚本（推荐）
+./start.sh
+
+# 或使用 uv 命令
+uv run xhs-video-mcp
+
+# 或指定主机和端口
+uv run xhs-video-mcp --host 0.0.0.0 --port 8005
+```
+
+服务将在 `http://localhost:8005` 启动（默认端口）。
 
 #### 启动小红书内容生成 MCP 服务
 
@@ -414,10 +491,18 @@ curl -X POST http://localhost:8012/api/v1/chat \
 当你说"帮我写一篇关于美食的小红书"时，AI 会：
 1. 分析美食主题和需求
 2. 调用 `xhs-content-generator-mcp` 生成内容文案
-3. 调用 `image_video_mcp` 生成配图
+3. 调用 `xhs-image-mcp` 生成配图
 4. 调用 `xhs-browser-automation-mcp` 发布内容
 5. 监控发布结果
 6. 根据数据调整后续策略
+
+**视频生成流程**：
+当需要生成视频时，AI 会：
+1. 调用 `xhs-video-mcp` 生成视频脚本
+2. 使用 TTS 生成语音
+3. 从 Pexels/Pixabay 下载视频素材
+4. 合成视频（添加字幕、背景音乐、转场效果）
+5. 输出最终视频文件
 
 ### 场景四：完整集成使用
 
@@ -454,7 +539,7 @@ curl -X POST http://localhost:8012/api/v1/chat \
 
 ```
 .
-├── image_video_mcp/                # 图像视频生成 MCP 服务
+├── xhs-image-mcp/                  # 图像生成 MCP 服务
 │   ├── src/
 │   │   └── image_video_mcp/
 │   │       ├── main.py            # 主程序入口
@@ -462,6 +547,22 @@ curl -X POST http://localhost:8012/api/v1/chat \
 │   │       ├── prompts/           # Prompt 模板
 │   │       ├── resources/         # Resource 资源
 │   │       └── ...
+│   └── README.md                  # 详细文档
+│
+├── xhs-video-mcp/                  # 视频生成 MCP 服务
+│   ├── src/
+│   │   └── xhs_video_mcp/
+│   │       ├── main.py            # 主程序入口
+│   │       ├── services/          # 服务模块
+│   │       │   ├── llm_service.py        # LLM 服务
+│   │       │   ├── voice_service.py      # 语音服务
+│   │       │   ├── subtitle_service.py  # 字幕服务
+│   │       │   ├── material_service.py  # 素材服务
+│   │       │   ├── video_service.py     # 视频服务
+│   │       │   └── video_generation_service.py  # 主服务
+│   │       ├── config/            # 配置管理
+│   │       └── utils/             # 工具模块
+│   ├── start.sh                   # 启动脚本
 │   └── README.md                  # 详细文档
 │
 ├── xhs-content-generator-mcp/      # 小红书内容生成 MCP 服务
@@ -480,6 +581,12 @@ curl -X POST http://localhost:8012/api/v1/chat \
 │   │       ├── xiaohongshu/       # 小红书操作模块
 │   │       └── ...
 │   ├── tests/                     # 测试文件
+│   └── README.md                  # 详细文档
+│
+├── xhs-data-collector-mcp/         # 数据收集 MCP 服务
+│   ├── src/
+│   │   └── xhs_data_collector_mcp/
+│   │       └── ...
 │   └── README.md                  # 详细文档
 │
 ├── ai_social_scheduler/            # AI 调度系统
@@ -513,9 +620,13 @@ curl -X POST http://localhost:8012/api/v1/chat \
 ```json
 {
   "mcpServers": {
-    "image-video-mcp": {
+    "xhs-image-mcp": {
       "url": "http://localhost:8003",
-      "description": "图像视频生成 MCP 服务"
+      "description": "图像生成 MCP 服务"
+    },
+    "xhs-video-mcp": {
+      "url": "http://localhost:8005",
+      "description": "视频生成 MCP 服务"
     },
     "xhs-content-generator-mcp": {
       "url": "http://localhost:8001",
@@ -524,6 +635,10 @@ curl -X POST http://localhost:8012/api/v1/chat \
     "xhs-browser-automation-mcp": {
       "url": "http://localhost:8000",
       "description": "小红书浏览器自动化 MCP 服务"
+    },
+    "xhs-data-collector-mcp": {
+      "url": "http://localhost:8006",
+      "description": "数据收集 MCP 服务"
     }
   }
 }
@@ -536,14 +651,20 @@ curl -X POST http://localhost:8012/api/v1/chat \
 ```json
 {
   "mcpServers": {
-    "image-video-mcp": {
+    "xhs-image-mcp": {
       "url": "http://localhost:8003"
+    },
+    "xhs-video-mcp": {
+      "url": "http://localhost:8005"
     },
     "xhs-content-generator-mcp": {
       "url": "http://localhost:8001"
     },
     "xhs-browser-automation-mcp": {
       "url": "http://localhost:8000"
+    },
+    "xhs-data-collector-mcp": {
+      "url": "http://localhost:8006"
     }
   }
 }
@@ -567,7 +688,8 @@ curl -X POST http://localhost:8012/api/v1/chat \
 #    - 标签：美食、家常菜、生活
 # 3. 任务调度器调用 MCP 服务：
 #    - 生成内容（调用 xhs-content-generator-mcp）
-#    - 生成图片（调用 image_video_mcp）
+#    - 生成图片（调用 xhs-image-mcp）
+#    - 生成视频（调用 xhs-video-mcp，如需要）
 #    - 发布内容（调用 xhs-browser-automation-mcp）
 # 4. 监控发布结果
 # 5. 根据数据调整后续策略
