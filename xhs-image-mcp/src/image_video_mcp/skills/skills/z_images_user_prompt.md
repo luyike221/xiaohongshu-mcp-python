@@ -1,0 +1,76 @@
+# z_images_user_prompt
+> Z-Images 客户端专用的用户提示词模板
+
+根据以下内容生成图片提示词：
+
+【内容】
+{full_content}
+
+【风格要求】
+{style}
+
+【任务】
+分析内容，生成可直接用于图片生成模型的提示词。
+
+【生成原则】
+1. 根据内容特点，自动判断图片类型（人物/场景/物品/抽象等）
+2. 根据风格要求或内容特点，确定视觉风格（真实/动漫/插画/概念艺术等）
+3. 根据内容长度确定图片数量：
+   - 简短内容：1张
+   - 中等内容：3-5张
+   - 长内容：6-9张
+
+【提示词构建思路】
+提示词应包含以下要素（根据内容类型灵活组合）：
+- **主体描述**：核心对象、人物、场景或物品
+- **风格特征**：根据风格要求或内容特点确定（真实/动漫/插画等）
+- **场景环境**：背景、环境、氛围
+- **视觉细节**：构图、配色、光影、质感
+- **增强词**：ultra detailed, premium quality, high resolution 等
+
+【输出要求】
+- 直接生成完整的图片提示词文本（必须使用英文）
+- 提示词要清晰、具体、可直接使用
+- 不要包含"配图方案"、"说明"、"要求"等元语言
+- 每个页面的提示词要独立完整
+- 重要：所有提示词内容必须使用英文，不要使用中文
+
+【输出格式】
+JSON 格式：
+{{
+    "pages": [
+        {{
+            "index": 0,
+            "type": "cover",
+            "content": "完整的图片提示词文本，直接可用"
+        }}
+    ]
+}}
+
+示例：
+如果内容是"如何在家做拿铁咖啡"，风格要求是"真实"，可能输出：
+{{
+    "pages": [
+        {{
+            "index": 0,
+            "type": "cover",
+            "content": "a steaming hot latte coffee on a warm wooden table, coffee beans and latte art tools beside it, natural sunlight streaming through the window, creating a cozy home atmosphere, ultra detailed, premium quality, photorealistic"
+        }}
+    ]
+}}
+
+如果内容是"邻家女孩直播卖货，分享护肤心得和产品推荐"，风格要求是"真实"，可能输出：
+{{
+    "pages": [
+        {{
+            "index": 0,
+            "type": "cover",
+            "content": "a gentle and fresh girl next door, with a warm and gentle temperament, appearing in a sunlit bedroom, doing live streaming sales. She has a soft oval face, large natural almond eyes, natural double eyelids, natural eyebrows, soft straight nose, light natural lips, medium-length smooth hair with air bangs, consistent facial identity. Clear skin, light makeup, slightly rosy cheeks, presenting a warm daily atmosphere. Natural soft light, ultra detailed, premium quality, photorealistic"
+        }},
+        {{
+            "index": 1,
+            "type": "content",
+            "content": "skincare products neatly arranged on a dressing table, including serums, creams, face masks, sunlight streaming through the window onto the table, creating a fresh and natural atmosphere, product details clearly visible, ultra detailed, premium quality, photorealistic"
+        }}
+    ]
+}}

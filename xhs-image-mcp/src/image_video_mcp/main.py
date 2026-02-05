@@ -5,7 +5,7 @@
 from fastmcp import FastMCP
 from loguru import logger
 
-from .clients import WanT2IClient, GoogleGenAIClient, ZImageClient
+from .clients import WanT2IClient, GoogleGenAIClient, ZImageClient, DashScopeImageClient
 from .config import settings
 from .prompts import register_prompts
 from .resources import register_resources, register_resource_templates
@@ -137,13 +137,18 @@ async def generate_images_batch(
         # 创建图片生成服务（自动初始化通义千问客户端用于生成图片提示词）
         service = ImageGenerationService(auto_init_qwen=True)
 
-        # 批量生成图片（默认使用 Z-Image）
+        # 批量生成图片（默认使用 z-image-turbo）
         # 会根据 full_content 生成图片提示词
+        client = DashScopeImageClient(model="z-image-turbo")
         result = await service.generate_images_from_content(
             full_content=full_content,
             style=style,
             max_wait_time=max_wait_time,
+            client=client,  # 使用 z-image-turbo 客户端
         )
+        
+        # 关闭客户端
+        await client.close()
 
         logger.info(f"批量图片生成完成: task_id={result['task_id']}, 成功={result['completed']}, 失败={result['failed']}")
         return result

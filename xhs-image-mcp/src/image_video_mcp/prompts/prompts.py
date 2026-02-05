@@ -3,18 +3,23 @@ MCP Prompt 模板定义
 
 这些 Prompt 可以在 MCP Inspector 的 Prompts 标签页中查看和使用
 使用 @mcp.prompt 装饰器注册 Prompt
+
+注意：所有 Prompt 内容现在从 Skills 加载
 """
 
 from loguru import logger
+from ..skills import SkillManager
 
 
 def register_prompts(mcp):
     """
-    注册所有 Prompt 模板到 FastMCP 实例
+    注册所有 Prompt 模板到 FastMCP 实例（从 Skills 加载）
     
     Args:
         mcp: FastMCP 实例
     """
+    # 初始化技能管理器
+    skill_manager = SkillManager()
     # 1. 图像生成提示词优化 Prompt
     @mcp.prompt()
     def optimize_image_prompt(original_prompt: str) -> str:
@@ -27,21 +32,10 @@ def register_prompts(mcp):
         Returns:
             优化后的提示词、负面提示词建议和推荐尺寸
         """
-        return f"""优化以下图像生成提示词，使其更加详细和专业：
-
-原始提示词: {original_prompt}
-
-请提供：
-1. 优化后的提示词（包含更多细节、风格、质量描述）
-2. 推荐的负面提示词（negative_prompt）
-3. 建议的图像尺寸（width x height）
-
-优化后的提示词应该包含：
-- 主体描述（清晰明确）
-- 风格描述（如：写实、卡通、水彩等）
-- 质量描述（如：高清、4K、细节丰富等）
-- 光照和氛围描述（如：自然光、柔和光线、温暖色调等）
-- 构图描述（如：居中构图、三分法、特写等）"""
+        return skill_manager.format_skill(
+            "image_prompt_optimization",
+            original_prompt=original_prompt
+        ) or f"优化以下图像生成提示词，使其更加详细和专业：\n\n原始提示词: {original_prompt}"
 
     # 2. 视频生成提示词模板
     @mcp.prompt()
@@ -59,20 +53,14 @@ def register_prompts(mcp):
         Returns:
             详细的视频生成提示词
         """
-        return f"""生成一个关于 {topic} 的视频，视频时长为 {duration} 秒。
-
-视频要求：
-- 主题: {topic}
-- 时长: {duration} 秒
-- 风格: {style}
-- 场景: {scene}
-- 动作: {action}
-
-请生成详细的视频生成提示词，包括：
-1. 视频内容描述
-2. 镜头运动方式（如：推拉、摇移、跟随等）
-3. 画面风格和色调
-4. 音效建议（如果需要）"""
+        return skill_manager.format_skill(
+            "video_generation",
+            topic=topic,
+            duration=duration,
+            style=style,
+            scene=scene,
+            action=action
+        ) or f"生成一个关于 {topic} 的视频，视频时长为 {duration} 秒。"
 
     # 3. 图像风格描述 Prompt
     @mcp.prompt()
@@ -88,21 +76,12 @@ def register_prompts(mcp):
         Returns:
             详细的图像风格描述提示词
         """
-        return f"""为以下主题生成详细的图像风格描述：
-
-主题: {subject}
-风格类型: {style_type}
-用途: {purpose}
-
-请生成包含以下要素的详细提示词：
-- 主体: {subject}
-- 风格: {style_type}（如：写实、插画、水彩、油画、3D渲染等）
-- 色彩: 建议的色彩方案和色调
-- 构图: 推荐的构图方式
-- 细节: 需要突出的细节特征
-- 氛围: 整体氛围和情绪
-
-用途说明: {purpose}（如：社交媒体、广告、艺术创作等）"""
+        return skill_manager.format_skill(
+            "image_style_description",
+            subject=subject,
+            style_type=style_type,
+            purpose=purpose
+        ) or f"为以下主题生成详细的图像风格描述：\n\n主题: {subject}\n风格类型: {style_type}\n用途: {purpose}"
 
     # 4. 负面提示词生成 Prompt（使用 Resource）
     @mcp.prompt()
@@ -129,16 +108,12 @@ def register_prompts(mcp):
             # 如果资源获取失败，使用默认值
             combined_negative = "low resolution, blurry, distorted, low quality, worst quality"
         
-        return f"""为以下图像生成提示词生成对应的负面提示词（negative prompt）：
-
-正面提示词: {positive_prompt}
-图像类型: {image_type}
-
-参考负面提示词库：
-{combined_negative}
-
-请基于以上参考，为这个特定的图像生成一个全面的负面提示词列表，用逗号分隔。
-如果图像类型是 {image_type}，请特别关注该类型的常见问题。"""
+        return skill_manager.format_skill(
+            "negative_prompt_generation",
+            positive_prompt=positive_prompt,
+            image_type=image_type,
+            combined_negative=combined_negative
+        ) or f"为以下图像生成提示词生成对应的负面提示词（negative prompt）：\n\n正面提示词: {positive_prompt}\n图像类型: {image_type}"
 
     # 5. 批量图像生成计划 Prompt
     @mcp.prompt()
@@ -155,21 +130,13 @@ def register_prompts(mcp):
         Returns:
             批量图像生成计划
         """
-        return f"""为以下需求制定批量图像生成计划：
-
-主题系列: {theme}
-生成数量: {count} 张
-用途: {purpose}
-
-请为每张图像生成：
-1. 唯一的提示词（保持主题一致但各有特色）
-2. 推荐的尺寸
-3. 风格变体建议
-
-主题: {theme}
-数量: {count} 张
-用途: {purpose}
-风格要求: {style_requirement}"""
+        return skill_manager.format_skill(
+            "batch_image_planning",
+            theme=theme,
+            count=count,
+            purpose=purpose,
+            style_requirement=style_requirement
+        ) or f"为以下需求制定批量图像生成计划：\n\n主题系列: {theme}\n生成数量: {count} 张\n用途: {purpose}"
 
     # 6. 小红书风格图片生成 Prompt
     @mcp.prompt()
@@ -191,83 +158,13 @@ def register_prompts(mcp):
         Returns:
             完整的小红书风格图片生成提示词
         """
-        return f"""请生成一张小红书风格的图文内容图片。
-【合规特别注意的】注意不要带有任何小红书的logo，不要有右下角的用户id以及logo
-【合规特别注意的】用户给到的参考图片里如果有水印和logo（尤其是注意右下角，左上角），请一定要去掉
-
-页面内容：
-{page_content}
-
-页面类型：{page_type}
-
-如果当前页面类型不是封面页的话，你要参考最后一张图片作为封面的样式
-
-后续生成风格要严格参考封面的风格，要保持风格统一。
-
-设计要求：
-
-1. 整体风格
-- 小红书爆款图文风格
-- 清新、精致、有设计感
-- 适合年轻人审美
-- 配色和谐，视觉吸引力强
-
-2. 文字排版
-- 文字清晰可读，字号适中
-- 重要信息突出显示
-- 排版美观，留白合理
-- 支持 emoji 和符号
-- 如果是封面，标题要大而醒目
-
-3. 视觉元素
-- 背景简洁但不单调
-- 可以有装饰性元素（如图标、插画）
-- 配色温暖或清新
-- 保持专业感
-
-4. 页面类型特殊要求
-
-[封面] 类型：
-- 标题占据主要位置，字号最大
-- 副标题居中或在标题下方
-- 整体设计要有吸引力和冲击力
-- 背景可以更丰富，有视觉焦点
-
-[内容] 类型：
-- 信息层次分明
-- 列表项清晰展示
-- 重点内容用颜色或粗体强调
-- 可以有小图标辅助说明
-
-[总结] 类型：
-- 总结性文字突出
-- 可以有勾选框或完成标志
-- 给人完成感和满足感
-- 鼓励性的视觉元素
-
-5. 技术规格
-- 竖版 3:4 比例（小红书标准）
-- 高清画质
-- 适合手机屏幕查看
-- 所有文字内容必须完整呈现
-- 【特别注意】无论是给到的图片还是参考文字，请仔细思考，让其符合正确的竖屏观看的排版，不能左右旋转或者是倒置。
-
-6. 整体风格一致性
-为确保所有页面风格统一，请参考完整的内容大纲和用户原始需求来确定：
-- 整体色调和配色方案
-- 设计风格（清新/科技/温暖/专业等）
-- 视觉元素的一致性
-- 排版布局的统一风格
-
-用户原始需求：
-{user_topic if user_topic else "未提供"}
-
-完整内容大纲参考：
----
-{full_outline if full_outline else "未提供"}
----
-
-请根据以上要求，生成一张精美的小红书风格图片。请直接给出图片，不要有任何手机边框，或者是白色留边。"""
+        return skill_manager.format_skill(
+            "xiaohongshu_image_prompt",
+            page_content=page_content,
+            page_type=page_type,
+            user_topic=user_topic if user_topic else "未提供",
+            full_outline=full_outline if full_outline else "未提供"
+        ) or f"请生成一张小红书风格的图文内容图片。\n\n页面内容：\n{page_content}\n\n页面类型：{page_type}"
 
     logger.info("已注册 6 个 Prompt 模板，可在 MCP Inspector 的 Prompts 标签页中查看")
 

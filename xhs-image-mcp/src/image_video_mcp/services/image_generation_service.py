@@ -7,9 +7,10 @@ from pathlib import Path
 from typing import List, Dict, Any, Optional, Callable, Union
 from loguru import logger
 
-from ..clients import ZImageClient, WanT2IClient, GoogleGenAIClient
+from ..clients import ZImageClient, WanT2IClient, GoogleGenAIClient, DashScopeImageClient
 from ..llm_clients import get_model_provider_client
 from ..config import settings
+from ..skills import SkillManager
 import json
 
 
@@ -57,9 +58,15 @@ class ImageGenerationService:
             if llm_client and hasattr(llm_client, 'model'):
                 self.llm_model_name = llm_client.model
         
+        # 初始化技能管理器
+        self.skill_manager = SkillManager()
+        
         # 注册不同 client 类型的提示词模板
         self.prompt_templates: Dict[str, Callable] = {}
         self._register_templates()
+        
+        # 为 DashScopeImageClient 注册模板（使用 Z-Image 模板）
+        self.prompt_templates["DashScopeImageClient"] = self._z_image_template
         
         logger.info(f"图片生成服务初始化（最大并发数: {max_concurrent}, LLM客户端: {'已配置' if self.llm_client else '未配置'}）")
     
@@ -72,37 +79,23 @@ class ImageGenerationService:
     
     def _load_z_images_prompts(self) -> tuple[str, str]:
         """
-        加载 Z-Images 专用的提示词文件
-        
-        使用相对路径从当前文件位置查找提示词文件：
-        - 当前文件：services/image_generation_service.py
-        - 提示词文件：prompts/z-images_prompt_*.txt
+        从 Skills 加载 Z-Images 专用的提示词
         
         Returns:
             (system_prompt, user_prompt_template) 元组
         """
-        # 使用相对路径：从 services/ 目录到 prompts/ 目录
-        current_file = Path(__file__).resolve()
-        prompts_dir = current_file.parent.parent / "prompts"
+        system_prompt = self.skill_manager.get_skill("z_images_system_prompt")
+        user_prompt_template = self.skill_manager.get_skill("z_images_user_prompt")
         
-        system_prompt_path = prompts_dir / "z-images_prompt_system.txt"
-        user_prompt_path = prompts_dir / "z-images_prompt_user.txt"
-        
-        if not system_prompt_path.exists() or not user_prompt_path.exists():
-            raise FileNotFoundError(
-                f"Z-Images 提示词文件未找到。"
-                f"请确保以下文件存在：\n"
-                f"  - {system_prompt_path}\n"
-                f"  - {user_prompt_path}"
+        if not system_prompt or not user_prompt_template:
+            raise ValueError(
+                f"Z-Images 提示词 Skills 未找到。"
+                f"请确保以下 Skills 存在：\n"
+                f"  - z_images_system_prompt\n"
+                f"  - z_images_user_prompt"
             )
         
-        with open(system_prompt_path, "r", encoding="utf-8") as f:
-            system_prompt = f.read()
-        
-        with open(user_prompt_path, "r", encoding="utf-8") as f:
-            user_prompt_template = f.read()
-        
-        logger.info(f"已加载 Z-Images 提示词文件: {prompts_dir}")
+        logger.info("已从 Skills 加载 Z-Images 提示词")
         return system_prompt, user_prompt_template
     
     async def _generate_image_prompts_from_content(
@@ -212,28 +205,26 @@ class ImageGenerationService:
     
     def _get_default_system_prompt(self) -> str:
         """获取默认的系统提示词（用于非 Z-Images 客户端）"""
-        return """你是一个专业的图片生成提示词优化助手。你的核心任务是：根据用户提供的完整内容文本，生成适合图片生成模型的提示词，用于生成配合内容使用的视觉图片。
-
-请根据内容生成适合的图片提示词，确保提示词清晰、详细，能够指导图片生成模型生成符合要求的图片。"""
+        prompt = self.skill_manager.get_skill("default_system_prompt")
+        if not prompt:
+            raise ValueError("默认系统提示词 Skill 'default_system_prompt' 未找到")
+        return prompt
     
     def _get_default_user_prompt(self, client_type: str, full_content: str, style: str = "") -> str:
         """获取默认的用户提示词（用于非 Z-Images 客户端）"""
         style_text = f"\n\n风格要求：{style}" if style else "\n\n风格要求：未指定，请根据内容自动选择最合适的风格"
-        return f"""请根据以下完整内容文本，生成适合图片生成模型的提示词（客户端类型：{client_type}）。
-
-完整内容：
-{full_content}{style_text}
-
-请生成适合的图片提示词，返回 JSON 格式：
-{{
-    "pages": [
-        {{
-            "index": 0,
-            "type": "cover",
-            "content": "图片提示词内容"
-        }}
-    ]
-}}"""
+        
+        prompt = self.skill_manager.format_skill(
+            "default_user_prompt",
+            client_type=client_type,
+            full_content=full_content,
+            style_section=style_text
+        )
+        
+        if not prompt:
+            raise ValueError("默认用户提示词 Skill 'default_user_prompt' 未找到")
+        
+        return prompt
     
     def _get_template_for_client(self, client: Union[ZImageClient, WanT2IClient, GoogleGenAIClient]) -> Callable:
         """
@@ -270,8 +261,17 @@ class ImageGenerationService:
         Returns:
             生成的提示词（只包含 page_content）
         """
-        # 直接返回 page_content，不添加其他内容
-        # page_content 已经包含了极简文字和详细的配图方案
+        # 从 Skills 获取模板并格式化
+        prompt = self.skill_manager.format_skill(
+            "z_image_client_template",
+            page_content=page_content
+        )
+        
+        if prompt:
+            return prompt
+        
+        # 如果 Skill 未找到，回退到直接返回 page_content
+        logger.warning("z_image_client_template Skill 未找到，使用默认行为")
         return page_content
     
     def _wan_t2i_template(
@@ -297,18 +297,16 @@ class ImageGenerationService:
         }
         page_type_cn = type_mapping.get(page_type, "内容")
 
-        return f"""生成一张小红书风格的图文内容图片，{page_type_cn}类型。
-
-页面内容：{page_content}
-
-设计要求：
-- 小红书爆款图文风格，清新精致
-- 竖版 3:4 比例
-- 文字清晰可读，排版美观
-- 配色和谐，视觉吸引力强
-- 适合手机屏幕查看
-
-请生成精美的小红书风格图片，不要有任何logo、水印、手机边框或白色留边。"""
+        prompt = self.skill_manager.format_skill(
+            "wan_t2i_template",
+            page_content=page_content,
+            page_type_cn=page_type_cn
+        )
+        
+        if not prompt:
+            raise ValueError("wan_t2i_template Skill 未找到")
+        
+        return prompt
     
     def _google_genai_template(
         self,
@@ -333,23 +331,20 @@ class ImageGenerationService:
         }
         page_type_cn = type_mapping.get(page_type, "内容")
 
-        return f"""Create a Xiaohongshu (Little Red Book) style graphic content image, {page_type_cn} type.
-
-Content: {page_content}
-
-Design requirements:
-- Xiaohongshu trending graphic style, fresh and refined
-- Vertical 3:4 aspect ratio
-- Clear, readable text with beautiful layout
-- Harmonious color scheme with strong visual appeal
-- Suitable for mobile screen viewing
-- No logos, watermarks, phone frames, or white borders
-
-Please generate a beautiful Xiaohongshu style image according to the above requirements."""
+        prompt = self.skill_manager.format_skill(
+            "google_genai_template",
+            page_content=page_content,
+            page_type_cn=page_type_cn
+        )
+        
+        if not prompt:
+            raise ValueError("google_genai_template Skill 未找到")
+        
+        return prompt
     
     def _get_prompt_from_template(
         self,
-        client: Union[ZImageClient, WanT2IClient, GoogleGenAIClient],
+        client: Union[ZImageClient, WanT2IClient, GoogleGenAIClient, DashScopeImageClient],
         page_content: str,
         page_type: str,
     ) -> str:
@@ -369,7 +364,7 @@ Please generate a beautiful Xiaohongshu style image according to the above requi
 
     async def _generate_single_image(
         self,
-        client: Union[ZImageClient, WanT2IClient, GoogleGenAIClient],
+        client: Union[ZImageClient, WanT2IClient, GoogleGenAIClient, DashScopeImageClient],
         page: Dict[str, Any],
         max_wait_time: int,
     ) -> Dict[str, Any]:
@@ -418,6 +413,17 @@ Please generate a beautiful Xiaohongshu style image according to the above requi
                     # 注意：WanT2IClient 返回的是任务信息，需要轮询获取结果
                     # 这里简化处理，实际使用时需要根据任务状态获取图片
                     raise NotImplementedError("WanT2IClient 需要异步任务处理，暂不支持直接生成")
+                elif isinstance(client, DashScopeImageClient):
+                    # DashScope 客户端：返回 bytes
+                    # 根据模型选择尺寸
+                    if client.model == "z-image-turbo":
+                        size = "1120*1440"  # z-image-turbo 推荐尺寸
+                    else:
+                        size = "1024*1365"  # 竖版 3:4 比例
+                    image_data = await client.generate_image(
+                        prompt=prompt,
+                        size=size,
+                    )
                 else:
                     raise ValueError(f"不支持的客户端类型: {client_type}")
                 
@@ -444,7 +450,7 @@ Please generate a beautiful Xiaohongshu style image according to the above requi
         self,
         pages: List[Dict[str, Any]],
         max_wait_time: int = 600,
-        client: Optional[Union[ZImageClient, WanT2IClient, GoogleGenAIClient]] = None,
+        client: Optional[Union[ZImageClient, WanT2IClient, GoogleGenAIClient, DashScopeImageClient]] = None,
     ) -> Dict[str, Any]:
         """
         批量生成图片
@@ -546,7 +552,7 @@ Please generate a beautiful Xiaohongshu style image according to the above requi
         full_content: str,
         style: str = "",
         max_wait_time: int = 600,
-        client: Optional[Union[ZImageClient, WanT2IClient, GoogleGenAIClient]] = None,
+        client: Optional[Union[ZImageClient, WanT2IClient, GoogleGenAIClient, DashScopeImageClient]] = None,
     ) -> Dict[str, Any]:
         """
         根据完整内容生成图片
