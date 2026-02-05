@@ -26,6 +26,7 @@
 - **🔌 模块化设计**：内容生成、平台操作、AI调度三层架构，灵活可扩展
 - **🎨 内容创作**：AI自动生成图像和视频，支持完整的内容创作流程
 - **📱 多平台支持**：支持小红书、抖音、快手等平台（逐步扩展）
+- **🛠️ Skills 技能管理系统**：采用 `xhs-image-mcp/src/image_video_mcp/skills/` 技能管理架构，通过 Markdown 文件组织和管理提示词技能，支持动态加载、参数格式化，实现提示词的模块化和可复用化
 
 ---
 
@@ -98,6 +99,7 @@
 - 🎨 **图像生成**：基于提示词生成高质量图像（支持通义万相）
 - 🚀 **FastMCP框架**：使用 FastMCP 快速构建 MCP 服务
 - 🔌 **MCP协议实现**：完整支持 Model Context Protocol 规范
+- 🛠️ **Skills 技能管理系统**：采用 `src/image_video_mcp/skills/` 架构，通过 Markdown 文件组织和管理提示词技能，支持动态加载、参数格式化，实现提示词的模块化和可复用化
 - 📝 **Prompt模板**：提供5个预定义的Prompt模板
 - 📦 **Resource资源**：提供6个预定义的Resource资源（风格预设、配置模板等）
 - 🎯 **Resource Template**：提供8个预定义的Resource Template模板，支持动态参数访问
@@ -546,6 +548,9 @@ curl -X POST http://localhost:8012/api/v1/chat \
 │   │       ├── clients/           # 客户端模块
 │   │       ├── prompts/           # Prompt 模板
 │   │       ├── resources/         # Resource 资源
+│   │       ├── skills/            # Skills 技能管理系统（核心）
+│   │       │   ├── skill_manager.py  # 技能管理器
+│   │       │   └── skills/        # 技能文件目录（Markdown格式）
 │   │       └── ...
 │   └── README.md                  # 详细文档
 │
