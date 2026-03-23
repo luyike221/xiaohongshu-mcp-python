@@ -1,0 +1,1737 @@
+{
+  "global": {
+    "appSettings": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": {
+        "notificationInterval": 30,
+        "prefetchTimeout": 3001,
+        "prefetchRedisExpires": 259200000,
+        "webLabRedisExpires": 864000000,
+        "searchFilterGuideConfig": {
+          "maxDailyShow": 1,
+          "maxTotalShow": 3,
+          "showInterval": 1,
+          "validDays": 15,
+          "autoCloseDelay": 5000
+        },
+        "retryFeeds": true,
+        "grayModeConfig": {
+          "global": false,
+          "dateRange": [
+            "2023-08-01 00:00:00",
+            "2023-08-19 23:59:59"
+          ],
+          "greyRule": {
+            "layout": {
+              "enable": false,
+              "pages": [
+                "Explore"
+              ]
+            },
+            "pages": [
+              "Explore"
+            ]
+          },
+          "disableLikeNotes": [
+            "64ce36f7000000000c036ba5"
+          ],
+          "disableSearchHint": false
+        },
+        "NIO": true,
+        "ICPInfoList": [
+          {
+            "label": "沪ICP备13030189号",
+            "link": "//beian.miit.gov.cn/",
+            "title": "小红书_沪ICP备"
+          },
+          {
+            "label": "营业执照",
+            "link": "//fe-video-qc.xhscdn.com/fe-platform/5581076bd6b6af2e0e943abb024ad0e16f2ebff6.pdf",
+            "title": "小红书_营业执照"
+          },
+          {
+            "label": "2024沪公网安备31010102002533号",
+            "link": "//www.beian.gov.cn/portal/registerSystemInfo?recordcode=31010102002533",
+            "title": "小红书_沪公网安备"
+          },
+          {
+            "label": "增值电信业务经营许可证：沪B2-20150021",
+            "link": "//fe-video-qc.xhscdn.com/fe-platform-file/104101b831hhkkll23u0678gtks7tu70004en2n231udpe",
+            "title": "小红书_网文"
+          },
+          {
+            "label": "医疗器械网络交易服务第三方平台备案：(沪)网械平台备字[2019]第00006号",
+            "link": "//fe-video-qc.xhscdn.com/fe-platform/410dce57bc12a6d7e5808060e47644fbe46f68ff.pdf",
+            "title": "小红书_医疗器械网络交易服务"
+          },
+          {
+            "label": "互联网药品信息服务资格证书：(沪)-经营性-2023-0144",
+            "link": "//fe-video-qc.xhscdn.com/fe-platform/f37a08cacc088061beb38329c387c32fc48fc6fe.pdf",
+            "title": "小红书_互联网药品信息服务"
+          },
+          {
+            "label": "违法不良信息举报电话：4006676810",
+            "link": "//www.shjbzx.cn",
+            "title": "小红书_上海市互联网举报中心"
+          },
+          {
+            "label": "上海市互联网举报中心",
+            "link": "//www.shjbzx.cn",
+            "title": "小红书_上海市互联网举报中心"
+          },
+          {
+            "label": "网上有害信息举报专区",
+            "link": "//www.12377.cn",
+            "title": "网上有害信息举报专区"
+          },
+          {
+            "label": "自营经营者信息",
+            "link": "//dc.xhscdn.com/06c2adb0-b353-11e9-9d0c-7be9ff8961c1/自营经营者信息公示.pdf",
+            "title": "小红书_沪公网安备"
+          },
+          {
+            "label": "网络文化经营许可证：沪网文(2024)1344-086号",
+            "link": "//fe-video-qc.xhscdn.com/fe-platform/7970f6e8b70aedc995ba273d04b6b6751abcd63c.pdf",
+            "title": "小红书_网络文化经营许可"
+          },
+          {
+            "label": "个性化推荐算法 网信算备310101216601302230019号",
+            "link": "https://beian.cac.gov.cn/api/static/fileUpload/principalOrithm/additional/user_c015445c-80ac-45f7-94d7-3871e961b1fe_d4425f3b-7f35-45af-b8d4-badd4424d6d5.pdf"
+          }
+        ],
+        "disableBanAlert": "false",
+        "showAdBlockAlert": 0,
+        "aiSearchConfig": {
+          "searchInputImageConfig": {
+            "disableTextWhenAcrossWeb": "联网搜索暂不支持上传图片"
+          },
+          "acrosssWebConfig": {
+            "enable": false,
+            "text": "联网搜索",
+            "icon": "",
+            "disableTextWhenInputImage": "图片搜索暂不支持联网搜索",
+            "offTooltipContent": "",
+            "onTooltipContent": "开启后将搜索全网内容"
+          },
+          "searchHintConfig": {
+            "homePageSearchInputHint": "搜索或输入任何问题"
+          },
+          "sugConfig": {
+            "maxSugCount": 10
+          }
+        },
+        "signConfig": {
+          "url": "https://fe-static.xhscdn.com/as/v2/ds/4c0bab9011f51d35ca6280649340e9b9.js"
+        },
+        "webPlayerConfig": {}
+      },
+      "_value": {
+        "notificationInterval": 30,
+        "prefetchTimeout": 3001,
+        "prefetchRedisExpires": 259200000,
+        "webLabRedisExpires": 864000000,
+        "searchFilterGuideConfig": {
+          "maxDailyShow": 1,
+          "maxTotalShow": 3,
+          "showInterval": 1,
+          "validDays": 15,
+          "autoCloseDelay": 5000
+        },
+        "retryFeeds": true,
+        "grayModeConfig": {
+          "global": false,
+          "dateRange": [
+            "2023-08-01 00:00:00",
+            "2023-08-19 23:59:59"
+          ],
+          "greyRule": {
+            "layout": {
+              "enable": false,
+              "pages": [
+                "Explore"
+              ]
+            },
+            "pages": [
+              "Explore"
+            ]
+          },
+          "disableLikeNotes": [
+            "64ce36f7000000000c036ba5"
+          ],
+          "disableSearchHint": false
+        },
+        "NIO": true,
+        "ICPInfoList": [
+          {
+            "label": "沪ICP备13030189号",
+            "link": "//beian.miit.gov.cn/",
+            "title": "小红书_沪ICP备"
+          },
+          {
+            "label": "营业执照",
+            "link": "//fe-video-qc.xhscdn.com/fe-platform/5581076bd6b6af2e0e943abb024ad0e16f2ebff6.pdf",
+            "title": "小红书_营业执照"
+          },
+          {
+            "label": "2024沪公网安备31010102002533号",
+            "link": "//www.beian.gov.cn/portal/registerSystemInfo?recordcode=31010102002533",
+            "title": "小红书_沪公网安备"
+          },
+          {
+            "label": "增值电信业务经营许可证：沪B2-20150021",
+            "link": "//fe-video-qc.xhscdn.com/fe-platform-file/104101b831hhkkll23u0678gtks7tu70004en2n231udpe",
+            "title": "小红书_网文"
+          },
+          {
+            "label": "医疗器械网络交易服务第三方平台备案：(沪)网械平台备字[2019]第00006号",
+            "link": "//fe-video-qc.xhscdn.com/fe-platform/410dce57bc12a6d7e5808060e47644fbe46f68ff.pdf",
+            "title": "小红书_医疗器械网络交易服务"
+          },
+          {
+            "label": "互联网药品信息服务资格证书：(沪)-经营性-2023-0144",
+            "link": "//fe-video-qc.xhscdn.com/fe-platform/f37a08cacc088061beb38329c387c32fc48fc6fe.pdf",
+            "title": "小红书_互联网药品信息服务"
+          },
+          {
+            "label": "违法不良信息举报电话：4006676810",
+            "link": "//www.shjbzx.cn",
+            "title": "小红书_上海市互联网举报中心"
+          },
+          {
+            "label": "上海市互联网举报中心",
+            "link": "//www.shjbzx.cn",
+            "title": "小红书_上海市互联网举报中心"
+          },
+          {
+            "label": "网上有害信息举报专区",
+            "link": "//www.12377.cn",
+            "title": "网上有害信息举报专区"
+          },
+          {
+            "label": "自营经营者信息",
+            "link": "//dc.xhscdn.com/06c2adb0-b353-11e9-9d0c-7be9ff8961c1/自营经营者信息公示.pdf",
+            "title": "小红书_沪公网安备"
+          },
+          {
+            "label": "网络文化经营许可证：沪网文(2024)1344-086号",
+            "link": "//fe-video-qc.xhscdn.com/fe-platform/7970f6e8b70aedc995ba273d04b6b6751abcd63c.pdf",
+            "title": "小红书_网络文化经营许可"
+          },
+          {
+            "label": "个性化推荐算法 网信算备310101216601302230019号",
+            "link": "https://beian.cac.gov.cn/api/static/fileUpload/principalOrithm/additional/user_c015445c-80ac-45f7-94d7-3871e961b1fe_d4425f3b-7f35-45af-b8d4-badd4424d6d5.pdf"
+          }
+        ],
+        "disableBanAlert": "false",
+        "showAdBlockAlert": 0,
+        "aiSearchConfig": {
+          "searchInputImageConfig": {
+            "disableTextWhenAcrossWeb": "联网搜索暂不支持上传图片"
+          },
+          "acrosssWebConfig": {
+            "enable": false,
+            "text": "联网搜索",
+            "icon": "",
+            "disableTextWhenInputImage": "图片搜索暂不支持联网搜索",
+            "offTooltipContent": "",
+            "onTooltipContent": "开启后将搜索全网内容"
+          },
+          "searchHintConfig": {
+            "homePageSearchInputHint": "搜索或输入任何问题"
+          },
+          "sugConfig": {
+            "maxSugCount": 10
+          }
+        },
+        "signConfig": {
+          "url": "https://fe-static.xhscdn.com/as/v2/ds/4c0bab9011f51d35ca6280649340e9b9.js"
+        },
+        "webPlayerConfig": {}
+      }
+    },
+    "supportWebp": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": true,
+      "_value": true
+    },
+    "serverTime": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": 1774285133966,
+      "_value": 1774285133966
+    },
+    "grayMode": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": false,
+      "_value": false
+    },
+    "referer": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": "",
+      "_value": ""
+    },
+    "pwaAddDesktopPrompt": {
+      "__v_isRef": true,
+      "__v_isShallow": false
+    },
+    "firstVisitUrl": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": "https://www.xiaohongshu.com/search_result?keyword=%E4%BA%BA%E5%B7%A5%E6%99%BA%E8%83%BD&source=web_explore_feed&type=51",
+      "_value": "https://www.xiaohongshu.com/search_result?keyword=%E4%BA%BA%E5%B7%A5%E6%99%BA%E8%83%BD&source=web_explore_feed&type=51"
+    },
+    "easyAccessModalVisible": {
+      "addDesktopGuide": false,
+      "collectGuide": false,
+      "keyboardList": false,
+      "miniWindowGuide": false
+    },
+    "currentLayout": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": "default",
+      "_value": "default"
+    },
+    "fullscreenLocking": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": false,
+      "_value": false
+    },
+    "feedbackPopupVisible": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": false,
+      "_value": false
+    },
+    "trackFps": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": false,
+      "_value": false
+    },
+    "supportAVIF": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": true,
+      "_value": true
+    },
+    "imgFormatCollect": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": {
+        "ssr": [
+          "jpg",
+          "webp",
+          "avif"
+        ],
+        "csr": [
+          "jpg",
+          "webp",
+          "avif"
+        ]
+      },
+      "_value": {
+        "ssr": [
+          "jpg",
+          "webp",
+          "avif"
+        ],
+        "csr": [
+          "jpg",
+          "webp",
+          "avif"
+        ]
+      }
+    },
+    "isUndertake": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": false,
+      "_value": false
+    },
+    "aiSearchMode": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": "large",
+      "_value": "large"
+    },
+    "sideCollapse": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": false,
+      "_value": false
+    },
+    "currentNoteColumnWidthInAIFeeds": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": null,
+      "_value": null
+    },
+    "webLabData": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": {
+        "hasAccess": false
+      },
+      "_value": {
+        "hasAccess": false
+      }
+    }
+  },
+  "user": {
+    "loggedIn": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": false,
+      "_value": false
+    },
+    "activated": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": false,
+      "_value": false
+    },
+    "userInfo": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": {
+        "userId": "694410c6000000002b006460",
+        "guest": true
+      },
+      "_value": {
+        "userId": "694410c6000000002b006460",
+        "guest": true
+      }
+    },
+    "follow": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": [],
+      "_value": []
+    },
+    "userPageData": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": {},
+      "_value": {}
+    },
+    "activeTab": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": {
+        "key": 0,
+        "index": 0,
+        "query": "note",
+        "label": "笔记",
+        "lock": false,
+        "subTabs": null,
+        "feedType": 0
+      },
+      "_value": {
+        "key": 0,
+        "index": 0,
+        "query": "note",
+        "label": "笔记",
+        "lock": false,
+        "subTabs": null,
+        "feedType": 0
+      }
+    },
+    "notes": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": [
+        [],
+        [],
+        [],
+        [],
+        []
+      ],
+      "_value": [
+        [],
+        [],
+        [],
+        [],
+        []
+      ]
+    },
+    "isFetchingNotes": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": [
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "_value": [
+        false,
+        false,
+        false,
+        false,
+        false
+      ]
+    },
+    "tabScrollTop": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "_value": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "userFetchingStatus": {
+      "__v_isRef": true,
+      "__v_isShallow": false
+    },
+    "userNoteFetchingStatus": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": [
+        "",
+        "",
+        "",
+        "",
+        ""
+      ],
+      "_value": [
+        "",
+        "",
+        "",
+        "",
+        ""
+      ]
+    },
+    "bannedInfo": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": {
+        "userId": "",
+        "serverBanned": false,
+        "code": 0,
+        "showAlert": false,
+        "reason": "",
+        "api": ""
+      },
+      "_value": {
+        "userId": "",
+        "serverBanned": false,
+        "code": 0,
+        "showAlert": false,
+        "reason": "",
+        "api": ""
+      }
+    },
+    "firstFetchNote": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": true,
+      "_value": true
+    },
+    "noteQueries": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": [
+        {
+          "num": 30,
+          "cursor": "",
+          "userId": "",
+          "hasMore": true,
+          "page": 1
+        },
+        {
+          "num": 30,
+          "cursor": "",
+          "userId": "",
+          "hasMore": true,
+          "page": 1
+        },
+        {
+          "num": 30,
+          "cursor": "",
+          "userId": "",
+          "hasMore": true,
+          "page": 1
+        },
+        {
+          "num": 30,
+          "cursor": "",
+          "userId": "",
+          "hasMore": true,
+          "page": 1
+        },
+        {
+          "num": 30,
+          "cursor": "",
+          "userId": "",
+          "hasMore": true,
+          "page": 1
+        }
+      ],
+      "_value": [
+        {
+          "num": 30,
+          "cursor": "",
+          "userId": "",
+          "hasMore": true,
+          "page": 1
+        },
+        {
+          "num": 30,
+          "cursor": "",
+          "userId": "",
+          "hasMore": true,
+          "page": 1
+        },
+        {
+          "num": 30,
+          "cursor": "",
+          "userId": "",
+          "hasMore": true,
+          "page": 1
+        },
+        {
+          "num": 30,
+          "cursor": "",
+          "userId": "",
+          "hasMore": true,
+          "page": 1
+        },
+        {
+          "num": 30,
+          "cursor": "",
+          "userId": "",
+          "hasMore": true,
+          "page": 1
+        }
+      ]
+    },
+    "pageScrolled": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": 0,
+      "_value": 0
+    },
+    "activeSubTab": {
+      "__v_isRef": true,
+      "__v_isShallow": false
+    },
+    "isOwnBoard": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": true,
+      "_value": true
+    }
+  },
+  "board": {
+    "boardListData": {
+      "694410c6000000002b006460": {
+        "boardCount": 0,
+        "boards": [],
+        "page": 0,
+        "pageSize": 15,
+        "error": {
+          "name": "HTTPBizError",
+          "code": -104,
+          "status": 200,
+          "data": {
+            "code": -104,
+            "success": false,
+            "msg": "您当前登录的账号没有权限访问",
+            "data": {}
+          }
+        }
+      }
+    },
+    "isLoadingBoardList": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": false,
+      "_value": false
+    },
+    "boardDetails": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": {},
+      "_value": {}
+    },
+    "boardFeedsMap": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": {},
+      "_value": {}
+    },
+    "boardPageStatus": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": "pending",
+      "_value": "pending"
+    },
+    "userBoardList": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": [],
+      "_value": []
+    },
+    "errorInfo": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": {
+        "code": 0,
+        "message": ""
+      },
+      "_value": {
+        "code": 0,
+        "message": ""
+      }
+    }
+  },
+  "UserFileStore": {},
+  "login": {
+    "loginMethod": {
+      "__v_isRef": true,
+      "__v_isShallow": false
+    },
+    "from": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": "search_box",
+      "_value": "search_box"
+    },
+    "showLogin": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": true,
+      "_value": true
+    },
+    "agreed": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": false,
+      "_value": false
+    },
+    "showTooltip": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": false,
+      "_value": false
+    },
+    "loginData": {
+      "phone": "",
+      "authCode": ""
+    },
+    "errors": {
+      "phone": "",
+      "authCode": ""
+    },
+    "qrData": {
+      "backend": {
+        "qrId": "922701774285137685",
+        "code": "427620"
+      },
+      "image": "data:image/png;base64,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",
+      "status": "un_scanned"
+    },
+    "counter": {
+      "__v_isRef": true,
+      "__v_isShallow": false
+    },
+    "inAntiSpamChecking": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": false,
+      "_value": false
+    },
+    "recentFrom": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": "search_box",
+      "_value": "search_box"
+    },
+    "isObPagesVisible": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": false,
+      "_value": false
+    },
+    "obPageFillInProgress": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": null,
+      "_value": null
+    },
+    "verificationCodeStartTime": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": 0,
+      "_value": 0
+    },
+    "ageSelectValue": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": "21",
+      "_value": "21"
+    },
+    "genderSelectValue": {
+      "__v_isRef": true,
+      "__v_isShallow": false
+    },
+    "inSpamCheckSendAuthCode": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": false,
+      "_value": false
+    },
+    "isRegFusing": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": false,
+      "_value": false
+    },
+    "loginStep": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": 0,
+      "_value": 0
+    },
+    "isLogining": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": false,
+      "_value": false
+    },
+    "loginPadMountedTime": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": 1774285137355,
+      "_value": 1774285137355
+    },
+    "loginTips": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": "登录后查看搜索结果",
+      "_value": "登录后查看搜索结果"
+    },
+    "isRiskUser": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": false,
+      "_value": false
+    },
+    "closeLoginModal": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": false,
+      "_value": false
+    },
+    "traceId": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": "",
+      "_value": ""
+    },
+    "inAntiSpamCheckLogin": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": false,
+      "_value": false
+    },
+    "inAntiSpamCheckSecurityCode": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": false,
+      "_value": false
+    },
+    "inAntiSpamCheckQrcodeStatus": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": false,
+      "_value": false
+    }
+  },
+  "feed": {
+    "query": {
+      "cursorScore": "",
+      "num": 30,
+      "refreshType": 1,
+      "noteIndex": 0,
+      "unreadBeginNoteId": "",
+      "unreadEndNoteId": "",
+      "unreadNoteCount": 0,
+      "category": "homefeed_recommend",
+      "searchKey": "",
+      "needNum": 20,
+      "imageFormats": [],
+      "needFilterImage": false
+    },
+    "isFetching": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": false,
+      "_value": false
+    },
+    "isError": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": false,
+      "_value": false
+    },
+    "feedsWrapper": {
+      "__v_isRef": true,
+      "__v_isShallow": false
+    },
+    "undertakeNote": {
+      "__v_isRef": true,
+      "__v_isShallow": false
+    },
+    "feeds": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": [],
+      "_value": []
+    },
+    "currentChannel": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": "homefeed_recommend",
+      "_value": "homefeed_recommend"
+    },
+    "unreadInfo": {
+      "cachedFeeds": [],
+      "unreadBeginNoteId": "",
+      "unreadEndNoteId": "",
+      "unreadNoteCount": 0,
+      "timestamp": 0
+    },
+    "validIds": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": {
+        "noteIds": []
+      },
+      "_value": {
+        "noteIds": []
+      }
+    },
+    "mfStatistics": {
+      "timestamp": 0,
+      "visitTimes": 0,
+      "readFeedCount": 0
+    },
+    "channels": {
+      "__v_isRef": true,
+      "__v_isShallow": false
+    },
+    "isResourceDisplay": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": false,
+      "_value": false
+    },
+    "isActivityEnd": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": false,
+      "_value": false
+    },
+    "cancelFeedRequest": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": false,
+      "_value": false
+    },
+    "prefetchId": {
+      "__v_isRef": true,
+      "__v_isShallow": false
+    },
+    "mfRequestMetaData": {
+      "start": null,
+      "lasting": null
+    },
+    "placeholderFeeds": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": [],
+      "_value": []
+    },
+    "feedsCacheLogInfo": {
+      "flag": "unknown",
+      "errorCode": 0,
+      "isHitMfCache": false,
+      "SSRDocumentChecked": false,
+      "SSRDocumentCheckedSuccess": false
+    },
+    "isUsingPlaceholderFeeds": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": false,
+      "_value": false
+    },
+    "placeholderFeedsConsumed": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": false,
+      "_value": false
+    },
+    "isReplace": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": false,
+      "_value": false
+    },
+    "isFirstSuccessFetched": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": false,
+      "_value": false
+    },
+    "imgNoteFilterStatus": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": "unchecked",
+      "_value": "unchecked"
+    },
+    "ssrRequestStatus": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": 5,
+      "_value": 5
+    },
+    "ssrRenderExtra": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": "",
+      "_value": ""
+    }
+  },
+  "layout": {
+    "layoutInfoReady": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": true,
+      "_value": true
+    },
+    "columns": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": 5,
+      "_value": 5
+    },
+    "columnsWithSidebar": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": 6,
+      "_value": 6
+    },
+    "gap": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": {
+        "vertical": 16,
+        "horizontal": 32
+      },
+      "_value": {
+        "vertical": 16,
+        "horizontal": 32
+      }
+    },
+    "columnWidth": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": 250.66666666666666,
+      "_value": 250.66666666666666
+    },
+    "interactionWidth": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": 440,
+      "_value": 440
+    },
+    "widthType": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": "normal",
+      "_value": "normal"
+    },
+    "bufferRow": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": 3,
+      "_value": 3
+    }
+  },
+  "aiAbExp": {},
+  "search": {
+    "state": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": "auto",
+      "_value": "auto"
+    },
+    "searchContext": {
+      "keyword": "人工智能",
+      "page": 1,
+      "pageSize": 20,
+      "searchId": "",
+      "sort": "general",
+      "noteType": 0,
+      "extFlags": [],
+      "filters": [],
+      "geo": ""
+    },
+    "feeds": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": [],
+      "_value": []
+    },
+    "searchValue": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": "人工智能",
+      "_value": "人工智能"
+    },
+    "suggestions": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": [],
+      "_value": []
+    },
+    "userInputSugTrigger": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": "",
+      "_value": ""
+    },
+    "keywordFrom": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": 51,
+      "_value": 51
+    },
+    "tagSearch": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": [],
+      "_value": []
+    },
+    "activeTagSearch": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": null,
+      "_value": null
+    },
+    "searchFeedsWrapper": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": {},
+      "_value": {}
+    },
+    "currentSearchType": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": "all",
+      "_value": "all"
+    },
+    "hintWord": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": {
+        "title": "搜索小红书",
+        "searchWord": "小红书网页版",
+        "hintWordRequestId": "default",
+        "type": "default"
+      },
+      "_value": {
+        "title": "搜索小红书",
+        "searchWord": "小红书网页版",
+        "hintWordRequestId": "default",
+        "type": "default"
+      }
+    },
+    "sugType": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": null,
+      "_value": null
+    },
+    "queryTrendingInfo": {
+      "__v_isRef": true,
+      "__v_isShallow": false
+    },
+    "queryTrendingParams": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": {
+        "source": "search",
+        "searchType": "trend",
+        "lastQuery": "",
+        "lastQueryTime": 0,
+        "wordRequestSituation": "FIRST_ENTER",
+        "hintWord": "",
+        "hintWordType": "",
+        "hintWordRequestId": ""
+      },
+      "_value": {
+        "source": "search",
+        "searchType": "trend",
+        "lastQuery": "",
+        "lastQueryTime": 0,
+        "wordRequestSituation": "FIRST_ENTER",
+        "hintWord": "",
+        "hintWordType": "",
+        "hintWordRequestId": ""
+      }
+    },
+    "queryTrendingFetched": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": false,
+      "_value": false
+    },
+    "oneboxInfo": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": {},
+      "_value": {}
+    },
+    "hasMore": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": true,
+      "_value": true
+    },
+    "firstEnterSearchPage": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": false,
+      "_value": false
+    },
+    "userLists": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": [],
+      "_value": []
+    },
+    "fetchUserListsStatus": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": "auto",
+      "_value": "auto"
+    },
+    "isFetchingUserLists": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": false,
+      "_value": false
+    },
+    "hasMoreUser": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": true,
+      "_value": true
+    },
+    "searchCplId": {
+      "__v_isRef": true,
+      "__v_isShallow": false
+    },
+    "wordRequestId": {
+      "__v_isRef": true,
+      "__v_isShallow": false
+    },
+    "historyList": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": [],
+      "_value": []
+    },
+    "searchPageHasPrevRoute": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": false,
+      "_value": false
+    },
+    "searchHotSpots": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": [],
+      "_value": []
+    },
+    "hotspotQueryNoteStep": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": "display",
+      "_value": "display"
+    },
+    "hotspotQueryNoteIndex": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": 0,
+      "_value": 0
+    },
+    "canShowHotspotQueryNote": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": true,
+      "_value": true
+    },
+    "forceHotspotSearch": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": false,
+      "_value": false
+    },
+    "searchCardHotSpots": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": [],
+      "_value": []
+    },
+    "isHotspotSearch": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": false,
+      "_value": false
+    },
+    "filters": {
+      "__v_isRef": true,
+      "__v_isShallow": false
+    },
+    "activeFilters": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": [],
+      "_value": []
+    },
+    "filterParams": {
+      "__v_isRef": true,
+      "__v_isShallow": false
+    },
+    "sessionId": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": "a4697373-3d83-492b-8878-c01e29c7be2f",
+      "_value": "a4697373-3d83-492b-8878-c01e29c7be2f"
+    },
+    "rootSearchId": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": "",
+      "_value": ""
+    },
+    "searchUserContext": {
+      "keyword": "",
+      "searchId": "",
+      "page": 1,
+      "pageSize": 15,
+      "bizType": "web_search_user",
+      "requestId": ""
+    },
+    "aiSearchAcrosssWeb": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": false,
+      "_value": false
+    },
+    "aiAcrosssWebActivedFromHeaderInput": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": false,
+      "_value": false
+    },
+    "aiSearchImageList": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": [],
+      "_value": []
+    },
+    "isSearchFromAiInput": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": false,
+      "_value": false
+    },
+    "currentUserMessageId": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": null,
+      "_value": null
+    },
+    "currentSearchRoundId": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": null,
+      "_value": null
+    },
+    "hasPreFetchedNotes": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": false,
+      "_value": false
+    },
+    "currentAnchorId": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": -1,
+      "_value": -1
+    },
+    "isRoundSwitching": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": false,
+      "_value": false
+    }
+  },
+  "conversation": {
+    "activeConversation": {
+      "__v_isRef": true,
+      "__v_isShallow": true,
+      "_rawValue": null,
+      "_value": null
+    },
+    "historyQuerys": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": [],
+      "_value": []
+    },
+    "currentActiveRoundId": {
+      "__v_isRef": true,
+      "__v_isShallow": true,
+      "_rawValue": null,
+      "_value": null
+    },
+    "isInitializing": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": false,
+      "_value": false
+    },
+    "coordinator": {
+      "__v_isRef": true,
+      "__v_isShallow": true,
+      "_rawValue": null,
+      "_value": null
+    }
+  },
+  "traceSourceStore": {
+    "traceSourceInfo": {
+      "__v_isRef": true,
+      "__v_isShallow": false
+    },
+    "traceSourceKeywordInfo": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": null,
+      "_value": null
+    },
+    "drawerPriorityMap": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": {
+        "traceSource": 10,
+        "traceSourceKeyword": 10
+      },
+      "_value": {
+        "traceSource": 10,
+        "traceSourceKeyword": 10
+      }
+    }
+  },
+  "aiSugHistory": {
+    "historyList": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": [],
+      "_value": []
+    }
+  },
+  "AiGuideWords": {
+    "guideWords": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": null,
+      "_value": null
+    }
+  },
+  "AiSugDataForChat": {
+    "guideWordsData": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": null,
+      "_value": null
+    }
+  },
+  "activity": {
+    "isOpen": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": false,
+      "_value": false
+    },
+    "currentUrl": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": "",
+      "_value": ""
+    },
+    "entryList": []
+  },
+  "note": {
+    "prevRouteData": {},
+    "prevRoute": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": "Empty",
+      "_value": "Empty"
+    },
+    "commentTarget": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": {},
+      "_value": {}
+    },
+    "isImgFullscreen": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": false,
+      "_value": false
+    },
+    "gotoPage": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": "",
+      "_value": ""
+    },
+    "firstNoteId": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": "",
+      "_value": ""
+    },
+    "autoOpenNote": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": false,
+      "_value": false
+    },
+    "topCommentId": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": "",
+      "_value": ""
+    },
+    "noteDetailMap": {
+      "undefined": {
+        "comments": {
+          "list": [],
+          "cursor": "",
+          "hasMore": true,
+          "loading": false,
+          "firstRequestFinish": false
+        },
+        "currentTime": 0,
+        "note": {}
+      },
+      "": {
+        "comments": {
+          "list": [],
+          "cursor": "",
+          "hasMore": true,
+          "loading": false,
+          "firstRequestFinish": false
+        },
+        "currentTime": 0,
+        "note": {}
+      }
+    },
+    "serverRequestInfo": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": {
+        "state": "success",
+        "errorCode": 0,
+        "errMsg": ""
+      },
+      "_value": {
+        "state": "success",
+        "errorCode": 0,
+        "errMsg": ""
+      }
+    },
+    "volume": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": 0,
+      "_value": 0
+    },
+    "recommendVideoMap": {},
+    "videoFeedType": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": "note_source",
+      "_value": "note_source"
+    },
+    "rate": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": 1,
+      "_value": 1
+    },
+    "currentNoteId": {
+      "__v_isRef": true,
+      "__v_isShallow": false
+    },
+    "forceScrollToComment": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": false,
+      "_value": false
+    },
+    "mediaWidth": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": 450,
+      "_value": 450
+    },
+    "noteHeight": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": 960,
+      "_value": 960
+    }
+  },
+  "nioStore": {
+    "collectionListDataSource": {
+      "__v_isRef": true,
+      "__v_isShallow": false
+    },
+    "error": {
+      "__v_isRef": true,
+      "__v_isShallow": false
+    }
+  },
+  "liveList": {
+    "query": {
+      "cursorScore": "0",
+      "source": 13,
+      "category": "0",
+      "topRoomIds": [],
+      "preSource": "",
+      "extraInfo": "",
+      "size": 27
+    },
+    "isError": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": false,
+      "_value": false
+    },
+    "categories": {
+      "__v_isRef": true,
+      "__v_isShallow": false
+    },
+    "liveList": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": [],
+      "_value": []
+    },
+    "isReplace": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": false,
+      "_value": false
+    },
+    "isFetching": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": false,
+      "_value": false
+    },
+    "isActivityEnd": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": false,
+      "_value": false
+    },
+    "currentChannel": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": "0",
+      "_value": "0"
+    },
+    "liveListWrapper": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": null,
+      "_value": null
+    },
+    "cancelFeedRequest": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": false,
+      "_value": false
+    },
+    "isFirstSuccessFetched": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": false,
+      "_value": false
+    }
+  },
+  "liveAbExp": {},
+  "notification": {
+    "isFetching": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": false,
+      "_value": false
+    },
+    "activeTabKey": {
+      "__v_isRef": true,
+      "__v_isShallow": false,
+      "_rawValue": -1,
+      "_value": -1
+    },
+    "notificationCount": {
+      "unreadCount": 0,
+      "mentions": 0,
+      "likes": 0,
+      "connections": 0
+    },
+    "notificationMap": {
+      "mentions": {
+        "messageList": [],
+        "hasMore": true,
+        "cursor": ""
+      },
+      "likes": {
+        "messageList": [],
+        "hasMore": true,
+        "cursor": ""
+      },
+      "connections": {
+        "messageList": [],
+        "hasMore": true,
+        "cursor": ""
+      }
+    }
+  }
+}
