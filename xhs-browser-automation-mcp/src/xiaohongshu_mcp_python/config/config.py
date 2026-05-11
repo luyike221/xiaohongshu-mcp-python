@@ -92,18 +92,18 @@ class XiaohongshuSelectors:
 # ============ 浏览器配置 ============
 
 class BrowserConfig:
-    """浏览器配置"""
+    """浏览器配置（数值类超时在类定义后从 Settings / .env 同步）"""
     
-    # 默认超时时间（毫秒）
+    # 默认超时时间（毫秒）— 占位，见模块底部 _sync_browser_timeouts_from_settings
     DEFAULT_TIMEOUT = 30000
     
-    # 页面加载超时时间
-    PAGE_LOAD_TIMEOUT = 120000
+    # 页面加载超时时间（毫秒）
+    PAGE_LOAD_TIMEOUT = 60000
     
-    # 元素等待超时时间
-    ELEMENT_TIMEOUT = 10000
+    # 元素等待超时时间（毫秒）
+    ELEMENT_TIMEOUT = 30000
     
-    # 上传等待超时时间
+    # 上传等待超时时间（毫秒）
     UPLOAD_TIMEOUT = 120000
     
     # 视窗大小配置
@@ -121,6 +121,19 @@ class BrowserConfig:
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
         "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
     )
+
+
+def _sync_browser_timeouts_from_settings() -> None:
+    """将 .env / Settings 中的超时同步到 BrowserConfig（单一配置源）"""
+    from .settings import settings
+
+    BrowserConfig.DEFAULT_TIMEOUT = settings.DEFAULT_TIMEOUT
+    BrowserConfig.PAGE_LOAD_TIMEOUT = settings.PAGE_LOAD_TIMEOUT
+    BrowserConfig.ELEMENT_TIMEOUT = settings.ELEMENT_TIMEOUT
+    BrowserConfig.UPLOAD_TIMEOUT = settings.UPLOAD_TIMEOUT
+
+
+_sync_browser_timeouts_from_settings()
 
 
 # ============ 发布配置 ============

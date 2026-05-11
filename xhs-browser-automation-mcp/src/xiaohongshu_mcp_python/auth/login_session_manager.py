@@ -245,9 +245,7 @@ class LoginSessionManager:
                 logger.info(f"会话 {session_id}: 开始阻塞等待登录完成（超时90秒）")
                 
                 # 调用 wait_for_login，阻塞直到登录框消失且"我的"按钮出现
-                success, message, cookies_saved = await session.login_manager.wait_for_login(
-                    timeout=90
-                )
+                success, message, cookies_saved = await session.login_manager.wait_for_login()
                 
                 if success:
                     session.status = "logged_in"

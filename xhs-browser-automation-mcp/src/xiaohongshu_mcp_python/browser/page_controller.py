@@ -23,6 +23,7 @@ class PageController:
         self.page = page
         from ..config import BrowserConfig
         self.default_timeout = BrowserConfig.ELEMENT_TIMEOUT
+        self.navigation_timeout = BrowserConfig.PAGE_LOAD_TIMEOUT
     
     async def navigate(self, url: str, wait_until: str = "domcontentloaded") -> None:
         """
@@ -39,7 +40,7 @@ class PageController:
                 logger.error("页面已关闭，无法导航")
                 raise Exception("页面已关闭，需要重新初始化浏览器")
             
-            await self.page.goto(url, wait_until=wait_until, timeout=self.default_timeout)
+            await self.page.goto(url, wait_until=wait_until, timeout=self.navigation_timeout)
             logger.info("页面加载完成")
         except PlaywrightTimeoutError:
             logger.error(f"导航超时: {url}")

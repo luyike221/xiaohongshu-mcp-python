@@ -15,6 +15,7 @@ from loguru import logger
 from ..browser.browser_manager import BrowserManager
 from ..browser.page_controller import PageController
 from ..storage.cookie_storage import CookieStorage
+from ..config import settings
 from ..config.xhs_xpath import XHSXPath
 
 
@@ -31,6 +32,7 @@ class XiaohongshuLogin:
     MASK_CSS = XHSXPath.MASK_CSS
     LOGIN_MODAL_CSS = XHSXPath.LOGIN_MODAL_CSS
     LOGIN_MODAL_XPATH = XHSXPath.LOGIN_MODAL_XPATH
+    LOGIN_MODAL_SUBMIT_XPATH = XHSXPath.LOGIN_MODAL_SUBMIT_XPATH
     LOGIN_COOKIES = XHSXPath.LOGIN_COOKIES
 
     def __init__(self, browser_manager: BrowserManager, cookie_storage: CookieStorage):
@@ -65,10 +67,16 @@ class XiaohongshuLogin:
         try:
             if navigate:
                 await self.page_controller.navigate(self.XHS_URL, wait_until="domcontentloaded")
-            # 负向检查：出现“登录”按钮通常表示未登录
+            # 负向检查：顶栏或弹窗内任一「登录」入口可见 → 未登录
             try:
                 if await self.page_controller.has_element(self.LOGIN_BUTTON_CSS, timeout=1000):
-                    logger.debug("检测到登录按钮，判定为未登录")
+                    logger.debug("检测到登录按钮（CSS），判定为未登录")
+                    return False
+            except Exception:
+                pass
+            try:
+                if await self.page_controller.has_element(self.LOGIN_MODAL_SUBMIT_XPATH, timeout=1000):
+                    logger.debug("检测到登录弹窗内提交按钮，判定为未登录")
                     return False
             except Exception:
                 pass
@@ -121,7 +129,7 @@ class XiaohongshuLogin:
             return None
         # 等待二维码元素出现
         try:
-            if await self.page_controller.has_element(self.QR_CSS, timeout=90000):
+            if await self.page_controller.has_element(self.QR_CSS, timeout=settings.LOGIN_QR_WAIT_MS):
                 src = await self.page_controller.get_attribute(self.QR_CSS, "src")
             else:
                 src = await self.page_controller.get_attribute(self.QR_XPATH, "src")
@@ -133,13 +141,13 @@ class XiaohongshuLogin:
             return None
         return None
 
-    async def wait_for_login(self, timeout: int = 90, interval: float = 0.5, fresh: bool = False) -> Tuple[bool, str, bool]:
+    async def wait_for_login(self, timeout: Optional[int] = None, interval: float = 0.5, fresh: bool = False) -> Tuple[bool, str, bool]:
         """
         阻塞等待登录成功：直到登录框消失且"我的"按钮出现
         返回 (success, message, cookies_saved)
         
         Args:
-            timeout: 超时时间（秒），默认90秒
+            timeout: 超时时间（秒）；默认使用 .env 中 LOGIN_WAIT_TIMEOUT
             interval: 检查间隔（秒），默认0.5秒
             fresh: 如果为True，会在等待前清空 cookies，确保不会被旧会话误判为已登录
         
@@ -148,6 +156,8 @@ class XiaohongshuLogin:
         """
         if not self.page_controller:
             await self.initialize()
+        
+        effective_timeout = settings.LOGIN_WAIT_TIMEOUT if timeout is None else timeout
         
         # fresh 模式：清空 cookies（文件和上下文）
         if fresh:
@@ -159,7 +169,7 @@ class XiaohongshuLogin:
             except Exception as ce:
                 logger.warning(f"清空 cookies 失败: {ce}")
         
-        logger.info(f"开始阻塞等待登录完成，超时={timeout}s, 检查间隔={interval}s")
+        logger.info(f"开始阻塞等待登录完成，超时={effective_timeout}s, 检查间隔={interval}s")
         logger.info("等待条件：1) 登录框消失 2) '我的'按钮出现")
         
         start_time = asyncio.get_event_loop().time()
@@ -169,9 +179,9 @@ class XiaohongshuLogin:
             # 超时判断
             current_time = asyncio.get_event_loop().time()
             elapsed = current_time - start_time
-            if elapsed > timeout:
-                logger.warning(f"等待登录超时（{timeout}秒）")
-                return False, f"等待登录超时（{timeout}秒）", False
+            if elapsed > effective_timeout:
+                logger.warning(f"等待登录超时（{effective_timeout}秒）")
+                return False, f"等待登录超时（{effective_timeout}秒）", False
             
             try:
                 # 检查条件1：登录框是否消失（使用CSS和XPath两种方式）
@@ -218,7 +228,7 @@ class XiaohongshuLogin:
                 # 每5秒记录一次当前状态（用于调试）
                 if current_time - last_log_time >= 5.0:
                     logger.debug(
-                        f"等待中... (已等待 {elapsed:.1f}s / {timeout}s) - "
+                        f"等待中... (已等待 {elapsed:.1f}s / {effective_timeout}s) - "
                         f"登录框存在: {login_modal_exists}, "
                         f"'我的'按钮存在: {user_button_exists}"
                     )
@@ -231,13 +241,13 @@ class XiaohongshuLogin:
             
             await asyncio.sleep(interval)
 
-    async def login(self, headless: bool = False, timeout: int = 90, fresh: bool = True) -> Tuple[bool, str, bool]:
+    async def login(self, headless: bool = False, timeout: Optional[int] = None, fresh: bool = True) -> Tuple[bool, str, bool]:
         """
         完整登录：打开弹窗→阻塞等待登录完成（登录框消失且"我的"按钮出现）
         返回 (success, message, cookies_saved)
         
         默认 fresh=True，强制清空 cookies，确保需要扫码而不是复用旧会话。
-        默认 timeout=90秒，阻塞等待直到登录框消失且"我的"按钮出现。
+        默认超时为 .env 中 LOGIN_WAIT_TIMEOUT（秒），阻塞等待直到登录框消失且"我的"按钮出现。
         """
         try:
             # 在启动前设置 headless

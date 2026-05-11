@@ -16,6 +16,8 @@ env_path = _temp_root / ".env"
 if env_path.exists():
     load_dotenv(env_path)
 
+# 元素/通用超时默认值（毫秒），供 Settings 与 DEFAULT_TIMEOUT 回退共用
+_ELEMENT_TIMEOUT_ENV: str = os.getenv("ELEMENT_TIMEOUT", "30000")
 
 # 环境类型
 Environment = Literal["development", "production"]
@@ -64,9 +66,15 @@ class Settings:
     # 全局用户配置
     GLOBAL_USER: str = os.getenv("GLOBAL_USER", "luyike")
     
-    # 浏览器超时配置
+    # 浏览器超时配置（毫秒，除非另有说明；统一由 .env 控制）
+    ELEMENT_TIMEOUT: int = int(_ELEMENT_TIMEOUT_ENV)
     PAGE_LOAD_TIMEOUT: int = int(os.getenv("PAGE_LOAD_TIMEOUT", "60000"))
-    ELEMENT_TIMEOUT: int = int(os.getenv("ELEMENT_TIMEOUT", "30000"))
+    # 通用默认超时；未单独设置时与 ELEMENT_TIMEOUT 一致
+    DEFAULT_TIMEOUT: int = int(os.getenv("DEFAULT_TIMEOUT", _ELEMENT_TIMEOUT_ENV))
+    UPLOAD_TIMEOUT: int = int(os.getenv("UPLOAD_TIMEOUT", "120000"))
+    # 登录流程（秒 / 毫秒）
+    LOGIN_WAIT_TIMEOUT: int = int(os.getenv("LOGIN_WAIT_TIMEOUT", "90"))
+    LOGIN_QR_WAIT_MS: int = int(os.getenv("LOGIN_QR_WAIT_MS", "90000"))
     
     # 调试配置（仅开发环境）
     DEBUG: bool = IS_DEVELOPMENT

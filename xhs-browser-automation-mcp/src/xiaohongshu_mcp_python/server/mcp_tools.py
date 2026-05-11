@@ -8,7 +8,7 @@ from loguru import logger
 from fastmcp import Context, FastMCP
 
 from ..services.service import XiaohongshuService
-from ..config import PublishImageContent, PublishVideoContent, settings
+from ..config import BrowserConfig, PublishImageContent, PublishVideoContent, settings
 from ..browser import BrowserManager
 from ..storage.cookie_storage import CookieStorage
 from ..managers.user_session_manager import get_user_session_manager
@@ -104,7 +104,11 @@ async def xiaohongshu_debug_init_browser(
         # 导航到小红书主页
         homepage_url = "https://www.xiaohongshu.com/explore"
         logger.info(f"正在导航到小红书主页: {homepage_url}")
-        await page.goto(homepage_url)
+        await page.goto(
+            homepage_url,
+            wait_until="domcontentloaded",
+            timeout=BrowserConfig.PAGE_LOAD_TIMEOUT,
+        )
         logger.info(f"成功进入小红书主页")
         
         # 注意：这里不关闭浏览器，保持浏览器运行状态以便调试

@@ -109,9 +109,11 @@ start_server() {
     
     echo -e "${CYAN}正在启动 MCP 服务器...${NC}"
     
-    # 使用 run.sh 启动服务器
-    if [ -f "./run.sh" ]; then
-        ./run.sh --host "$host" --port "$port" > /tmp/image-video-mcp-server.log 2>&1 &
+    # 直接启动 MCP（run.sh 固定等待 debugpy，不适合后台无人值守）
+    if command -v uv &> /dev/null && [ -f "./pyproject.toml" ]; then
+        SERVER_HOST="$host" uv run python -m xiaohongshu_mcp_python.main \
+            --env development --port "$port" --headless \
+            > /tmp/image-video-mcp-server.log 2>&1 &
         SERVER_PID=$!
         echo -e "${GREEN}服务器已启动（PID: ${SERVER_PID}）${NC}"
         echo -e "${BLUE}日志文件: /tmp/image-video-mcp-server.log${NC}"
@@ -136,7 +138,7 @@ start_server() {
         kill $SERVER_PID 2>/dev/null || true
         return 1
     else
-        echo -e "${RED}错误: 未找到 run.sh 脚本${NC}"
+        echo -e "${RED}错误: 未找到 uv 或 pyproject.toml，无法启动服务器${NC}"
         return 1
     fi
 }
@@ -219,7 +221,8 @@ if ! check_server "$HOST" "$PORT"; then
         fi
     else
         echo -e "${YELLOW}提示: 使用 --auto-start 选项可以自动启动服务器${NC}"
-        echo -e "${YELLOW}或者先运行: ./run.sh --host ${HOST} --port ${PORT}${NC}"
+        echo -e "${YELLOW}或者先运行: SERVER_HOST=${HOST} ./run.sh --port ${PORT}（需先附加调试器）${NC}"
+        echo -e "${YELLOW}无人值守请用: SERVER_HOST=${HOST} uv run python -m xiaohongshu_mcp_python.main --env development --port ${PORT} --headless${NC}"
         exit 1
     fi
 fi

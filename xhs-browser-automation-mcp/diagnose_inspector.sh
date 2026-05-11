@@ -28,7 +28,7 @@ if curl -s --connect-timeout 2 -H "Accept: text/event-stream" "${MCP_URL}" > /de
     echo -e "  地址: ${MCP_URL}"
 else
     echo -e "${RED}✗ MCP 服务器未运行或无法连接${NC}"
-    echo -e "  请先启动服务器: ./run.sh dev --port ${MCP_PORT}"
+    echo -e "  请先启动服务器: ./run.sh --port ${MCP_PORT}（debugpy 须先附加调试器）"
     exit 1
 fi
 

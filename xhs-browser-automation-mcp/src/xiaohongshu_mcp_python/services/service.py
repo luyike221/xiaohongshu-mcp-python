@@ -15,6 +15,7 @@ except ImportError:
     Context = None
 
 from ..config import (
+    BrowserConfig,
     PublishImageContent,
     PublishVideoContent,
     PublishResponse,
@@ -255,7 +256,11 @@ class XiaohongshuService:
             feeds_action = FeedsAction(page)
             
             # 导航到首页
-            await page.goto("https://www.xiaohongshu.com", wait_until="domcontentloaded")
+            await page.goto(
+                "https://www.xiaohongshu.com",
+                wait_until="domcontentloaded",
+                timeout=BrowserConfig.PAGE_LOAD_TIMEOUT,
+            )
             
             # 等待页面稳定
             await asyncio.sleep(1)

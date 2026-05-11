@@ -15,6 +15,7 @@ from pydantic import BaseModel, Field
 
 from ..services.service import XiaohongshuService
 from ..browser import BrowserManager
+from ..config import BrowserConfig
 from ..managers.user_session_manager import get_user_session_manager
 
 logger = logging.getLogger(__name__)
@@ -619,7 +620,7 @@ async def debug_init_browser():
         homepage_url = "https://www.xiaohongshu.com/explore"
         logger.info(f"正在导航到小红书主页: {homepage_url}")
         
-        await page.goto(homepage_url, wait_until="networkidle", timeout=30000)
+        await page.goto(homepage_url, wait_until="networkidle", timeout=BrowserConfig.PAGE_LOAD_TIMEOUT)
         
         # 等待页面加载完成
         await page.wait_for_load_state("networkidle")

@@ -16,6 +16,7 @@ from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 from ..browser.browser_manager import BrowserManager
 from ..browser.page_controller import PageController
 from ..storage.cookie_storage import CookieStorage
+from ..config import settings
 from ..config.xhs_xpath import XHSXPath
 
 
@@ -31,6 +32,7 @@ class XiaohongshuLogin:
     MASK_CSS = XHSXPath.MASK_CSS
     LOGIN_MODAL_CSS = XHSXPath.LOGIN_MODAL_CSS
     LOGIN_MODAL_XPATH = XHSXPath.LOGIN_MODAL_XPATH
+    LOGIN_MODAL_SUBMIT_XPATH = XHSXPath.LOGIN_MODAL_SUBMIT_XPATH
     LOGIN_COOKIES = XHSXPath.LOGIN_COOKIES
 
     def __init__(self, browser_manager: BrowserManager, cookie_storage: CookieStorage):
@@ -62,9 +64,9 @@ class XiaohongshuLogin:
         """
         检查是否已登录
         
-        逻辑：
-        1. 正向检查：使用 USER_LINK_XPATH，如果存在说明已登录
-        2. 负向检查：使用 LOGIN_BUTTON_XPATH，如果存在说明未登录
+        逻辑（顺序重要）：
+        1. 正向：USER_LINK_XPATH（「我」）可见 → 已登录
+        2. 负向：顶栏 LOGIN_BUTTON_XPATH 或弹窗内 LOGIN_MODAL_SUBMIT_XPATH 任一可见 → 未登录
         
         Args:
             navigate: 是否导航到探索页
@@ -86,10 +88,16 @@ class XiaohongshuLogin:
             except Exception:
                 pass
             
-            # 负向检查：如果登录按钮存在，说明未登录
+            # 负向检查：顶栏「登录」或弹窗内提交「登录」任一存在 → 未登录
             try:
                 if await self.page_controller.has_element(self.LOGIN_BUTTON_XPATH, timeout=2000):
-                    logger.debug("检测到登录按钮，判定为未登录")
+                    logger.debug("检测到顶栏登录按钮，判定为未登录")
+                    return False
+            except Exception:
+                pass
+            try:
+                if await self.page_controller.has_element(self.LOGIN_MODAL_SUBMIT_XPATH, timeout=2000):
+                    logger.debug("检测到登录弹窗内提交按钮，判定为未登录")
                     return False
             except Exception:
                 pass
@@ -123,7 +131,7 @@ class XiaohongshuLogin:
             return None
         # 等待二维码元素出现
         try:
-            if await self.page_controller.has_element(self.QR_CSS, timeout=90000):
+            if await self.page_controller.has_element(self.QR_CSS, timeout=settings.LOGIN_QR_WAIT_MS):
                 src = await self.page_controller.get_attribute(self.QR_CSS, "src")
             else:
                 src = await self.page_controller.get_attribute(self.QR_XPATH, "src")
@@ -135,12 +143,12 @@ class XiaohongshuLogin:
             return None
         return None
 
-    async def wait_for_login(self, timeout: int = 90) -> Tuple[bool, str, bool]:
+    async def wait_for_login(self, timeout: Optional[int] = None) -> Tuple[bool, str, bool]:
         """
         阻塞等待登录成功：直到"我的"按钮出现
         
         Args:
-            timeout: 超时时间（秒），默认90秒
+            timeout: 超时时间（秒）；默认使用 .env 中 LOGIN_WAIT_TIMEOUT
         
         Returns:
             (success, message, cookies_saved) 元组
@@ -149,27 +157,28 @@ class XiaohongshuLogin:
             await self.initialize()
         
         page = await self.browser_manager.get_page()
+        effective_timeout = settings.LOGIN_WAIT_TIMEOUT if timeout is None else timeout
         
         try:
             await page.wait_for_selector(
                 self.USER_LINK_XPATH, 
                 state="visible", 
-                timeout=timeout * 1000
+                timeout=effective_timeout * 1000
             )
             cookies_saved = await self.browser_manager.save_cookies()
             logger.info("✅ 登录成功，已保存 cookies")
             return True, "登录成功", cookies_saved
         except PlaywrightTimeoutError:
-            logger.warning(f"等待登录超时（{timeout}秒）")
-            return False, f"超时（{timeout}秒）", False
+            logger.warning(f"等待登录超时（{effective_timeout}秒）")
+            return False, f"超时（{effective_timeout}秒）", False
 
-    async def login(self, headless: bool = False, timeout: int = 90, fresh: bool = True) -> Tuple[bool, str, bool]:
+    async def login(self, headless: bool = False, timeout: Optional[int] = None, fresh: bool = True) -> Tuple[bool, str, bool]:
         """
         完整登录：打开弹窗→阻塞等待登录完成（登录框消失且"我的"按钮出现）
         返回 (success, message, cookies_saved)
         
         默认 fresh=True，强制清空 cookies，确保需要扫码而不是复用旧会话。
-        默认 timeout=90秒，阻塞等待直到登录框消失且"我的"按钮出现。
+        默认超时为 .env 中 LOGIN_WAIT_TIMEOUT（秒），阻塞等待直到登录框消失且"我的"按钮出现。
         """
         try:
             # 在启动前设置 headless
