@@ -1,12 +1,3 @@
-"""
-存储模块
+"""存储相关子模块（登录态使用浏览器 User Data，不再提供 Cookie JSON 模块）。"""
 
-提供数据持久化功能，包括：
-- Cookie 存储和加载
-- 配置文件管理
-- 临时文件处理
-"""
-
-from .cookie_storage import CookieStorage
-
-__all__ = ["CookieStorage"]
+__all__: list[str] = []

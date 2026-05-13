@@ -1,11 +1,6 @@
 """
-小红书登录管理器
-
-提供稳定、可靠的登录流程：
-- 浏览器初始化和资源清理
-- 打开登录弹窗并获取二维码
-- 阻塞等待登录完成（登录框消失且"我的"按钮出现）
-- 登录状态检查（基于DOM元素和Cookie）
+小红书登录管理器：浏览器初始化、登录弹窗、阻塞等待登录完成、DOM 登录态检查。
+登录态仅写入持久化 Chrome User Data，不使用 cookies JSON。
 """
 
 import asyncio
@@ -15,15 +10,13 @@ from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 
 from ..browser.browser_manager import BrowserManager
 from ..browser.page_controller import PageController
-from ..storage.cookie_storage import CookieStorage
 from ..config import settings
 from ..config.xhs_xpath import XHSXPath
 
 
 class XiaohongshuLogin:
     """小红书登录管理器"""
-    
-    # 使用配置文件中的选择器
+
     XHS_URL = XHSXPath.XHS_URL
     QR_CSS = XHSXPath.QR_CSS
     QR_XPATH = XHSXPath.QR_XPATH
@@ -35,60 +28,53 @@ class XiaohongshuLogin:
     LOGIN_MODAL_SUBMIT_XPATH = XHSXPath.LOGIN_MODAL_SUBMIT_XPATH
     LOGIN_COOKIES = XHSXPath.LOGIN_COOKIES
 
-    def __init__(self, browser_manager: BrowserManager, cookie_storage: CookieStorage):
+    def __init__(self, browser_manager: BrowserManager):
         self.browser_manager = browser_manager
-        self.cookie_storage = cookie_storage
         self.page_controller: Optional[PageController] = None
 
     async def initialize(self) -> None:
-        """启动浏览器并准备页面控制器"""
         if not self.browser_manager.is_started():
             await self.browser_manager.start()
         page = await self.browser_manager.get_page()
         self.page_controller = PageController(page)
-        # 不在此处主动加载 cookies，避免重复加载
         logger.info("小红书登录管理器初始化完成")
 
     async def cleanup(self, save_cookies: bool = True) -> None:
-        """
-        关闭浏览器并清理资源
-        
-        Args:
-            save_cookies: 是否保存cookies，默认为True
-        """
+        """关闭浏览器。save_cookies 参数保留兼容，已无 JSON 可保存。"""
         if self.browser_manager.is_started():
-            await self.browser_manager.stop(save_cookies=save_cookies)
+            await self.browser_manager.stop()
         logger.info("小红书登录管理器资源清理完成（浏览器已关闭）")
 
     async def is_logged_in(self, navigate: bool = False) -> bool:
-        """
-        检查是否已登录
-        
-        逻辑（顺序重要）：
-        1. 正向：USER_LINK_XPATH（「我」）可见 → 已登录
-        2. 负向：顶栏 LOGIN_BUTTON_XPATH 或弹窗内 LOGIN_MODAL_SUBMIT_XPATH 任一可见 → 未登录
-        
-        Args:
-            navigate: 是否导航到探索页
-        
-        Returns:
-            是否已登录
-        """
         if not self.page_controller:
             await self.initialize()
         try:
             if navigate:
-                await self.page_controller.navigate(self.XHS_URL, wait_until="domcontentloaded")
-            
-            # 正向检查：如果"我"的链接存在，说明已登录
+                try:
+                    await self.page_controller.navigate(self.XHS_URL, wait_until="domcontentloaded")
+                except Exception as nav_err:
+                    err_s = str(nav_err).lower()
+                    try:
+                        cur = (self.page_controller.page.url or "").lower()
+                    except Exception:
+                        cur = ""
+                    if "xiaohongshu.com" in cur and (
+                        "err_aborted" in err_s or "net::" in err_s
+                    ):
+                        logger.warning(
+                            "导航探索页异常但当前已在小红书域内，改为在当前页检测登录态: {}",
+                            nav_err,
+                        )
+                    else:
+                        raise
+
             try:
                 await self.page_controller.wait_for_element(self.USER_LINK_XPATH, timeout=2000, state="visible")
                 logger.info("检测到用户链接元素，判断为已登录")
                 return True
             except Exception:
                 pass
-            
-            # 负向检查：顶栏「登录」或弹窗内提交「登录」任一存在 → 未登录
+
             try:
                 if await self.page_controller.has_element(self.LOGIN_BUTTON_XPATH, timeout=2000):
                     logger.debug("检测到顶栏登录按钮，判定为未登录")
@@ -101,20 +87,18 @@ class XiaohongshuLogin:
                     return False
             except Exception:
                 pass
-                
+
         except Exception as e:
             logger.debug(f"登录状态 DOM 检查失败: {e}")
         return False
 
     async def open_login_modal(self) -> bool:
-        """导航到探索页，打开登录弹窗，如果已登录则返回 False"""
         if not self.page_controller:
             await self.initialize()
         await self.page_controller.navigate(self.XHS_URL, wait_until="domcontentloaded")
         if await self.is_logged_in(navigate=False):
             logger.info("已登录，跳过打开登录弹窗")
             return False
-        # 点击"登录"按钮，触发弹窗
         try:
             await self.page_controller.click_element(self.LOGIN_BUTTON_XPATH, timeout=8000)
             logger.info("已点击登录按钮，等待弹窗与二维码")
@@ -123,13 +107,11 @@ class XiaohongshuLogin:
         return True
 
     async def get_qrcode(self) -> Optional[str]:
-        """确保弹窗打开并返回二维码图片 URL；如果已登录返回 None"""
         if not self.page_controller:
             await self.initialize()
         opened = await self.open_login_modal()
         if not opened and await self.is_logged_in(navigate=False):
             return None
-        # 等待二维码元素出现
         try:
             if await self.page_controller.has_element(self.QR_CSS, timeout=settings.LOGIN_QR_WAIT_MS):
                 src = await self.page_controller.get_attribute(self.QR_CSS, "src")
@@ -144,60 +126,39 @@ class XiaohongshuLogin:
         return None
 
     async def wait_for_login(self, timeout: Optional[int] = None) -> Tuple[bool, str, bool]:
-        """
-        阻塞等待登录成功：直到"我的"按钮出现
-        
-        Args:
-            timeout: 超时时间（秒）；默认使用 .env 中 LOGIN_WAIT_TIMEOUT
-        
-        Returns:
-            (success, message, cookies_saved) 元组
-        """
         if not self.page_controller:
             await self.initialize()
-        
+
         page = await self.browser_manager.get_page()
         effective_timeout = settings.LOGIN_WAIT_TIMEOUT if timeout is None else timeout
-        
+
         try:
             await page.wait_for_selector(
-                self.USER_LINK_XPATH, 
-                state="visible", 
-                timeout=effective_timeout * 1000
+                self.USER_LINK_XPATH,
+                state="visible",
+                timeout=effective_timeout * 1000,
             )
-            cookies_saved = await self.browser_manager.save_cookies()
-            logger.info("✅ 登录成功，已保存 cookies")
-            return True, "登录成功", cookies_saved
+            logger.info("登录成功，会话已写入持久化 Chrome User Data")
+            return True, "登录成功", True
         except PlaywrightTimeoutError:
             logger.warning(f"等待登录超时（{effective_timeout}秒）")
             return False, f"超时（{effective_timeout}秒）", False
 
-    async def login(self, headless: bool = False, timeout: Optional[int] = None, fresh: bool = True) -> Tuple[bool, str, bool]:
-        """
-        完整登录：打开弹窗→阻塞等待登录完成（登录框消失且"我的"按钮出现）
-        返回 (success, message, cookies_saved)
-        
-        默认 fresh=True，强制清空 cookies，确保需要扫码而不是复用旧会话。
-        默认超时为 .env 中 LOGIN_WAIT_TIMEOUT（秒），阻塞等待直到登录框消失且"我的"按钮出现。
-        """
+    async def login(
+        self, headless: bool = False, timeout: Optional[int] = None, fresh: bool = True
+    ) -> Tuple[bool, str, bool]:
         try:
-            # 在启动前设置 headless
             self.browser_manager.headless = headless
             await self.initialize()
-            # fresh 模式：清空 cookies（文件和上下文）
             if fresh:
                 try:
-                    self.cookie_storage.clear_cookies()
                     page = await self.browser_manager.get_page()
                     await page.context.clear_cookies()
-                    logger.info("已清空 cookies，开始干净的登录流程")
+                    logger.info("已清空当前上下文 Cookie，开始干净登录流程")
                 except Exception as ce:
-                    logger.warning(f"清空 cookies 失败: {ce}")
-            # 导航后通过 DOM 检查当前是否已登录
+                    logger.warning(f"清空 Cookie 失败: {ce}")
             if await self.is_logged_in(navigate=True):
-                ok = await self.browser_manager.save_cookies()
-                return True, "用户已登录", ok
-            # 打开登录弹窗并阻塞等待登录完成
+                return True, "用户已登录", True
             await self.open_login_modal()
             success, message, saved = await self.wait_for_login(timeout=timeout)
             return success, message, saved
@@ -206,28 +167,17 @@ class XiaohongshuLogin:
             return False, f"登录失败: {e}", False
 
     async def logout(self) -> bool:
-        """清除本地与浏览器中的 Cookie"""
         try:
-            ok = self.cookie_storage.clear_cookies()
             if self.browser_manager.is_started():
                 page = await self.browser_manager.get_page()
                 await page.context.clear_cookies()
-            logger.info("已清除 cookies")
-            return ok
+            logger.info("已清除当前上下文 Cookie（磁盘 profile 仍保留，需手动删目录可彻底退出）")
+            return True
         except Exception as e:
             logger.error(f"登出失败: {e}")
             return False
 
     async def save_cookies(self) -> bool:
-        """保存当前浏览器的 cookies"""
-        try:
-            if self.browser_manager.is_started():
-                ok = await self.browser_manager.save_cookies()
-                logger.info("已保存 cookies")
-                return ok
-            else:
-                logger.warning("浏览器未启动，无法保存 cookies")
-                return False
-        except Exception as e:
-            logger.error(f"保存 cookies 失败: {e}")
-            return False
+        """兼容旧接口：登录态已由持久化 User Data 保存。"""
+        logger.info("登录态由持久化 Chrome User Data 维护（无 cookies JSON）")
+        return True

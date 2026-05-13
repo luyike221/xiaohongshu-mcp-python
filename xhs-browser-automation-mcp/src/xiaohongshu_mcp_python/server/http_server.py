@@ -586,15 +586,7 @@ async def post_comment(request: PostCommentRequest):
 # 调试接口
 @app.get("/api/v1/debug/init-browser")
 async def debug_init_browser():
-    """
-    调试接口：加载cookie并进入小红书主页
-    
-    功能：
-    1. 加载已保存的cookie
-    2. 启动浏览器（如果未启动）
-    3. 导航到小红书主页
-    4. 返回操作结果
-    """
+    """调试接口：使用持久化浏览器 profile 进入小红书主页。"""
     try:
         browser_manager = app_state["browser_manager"]
         
@@ -609,9 +601,7 @@ async def debug_init_browser():
             logger.info("浏览器未启动，正在启动...")
             await browser_manager.start()
         else:
-            # 如果已启动，重新加载cookie
-            logger.info("浏览器已启动，重新加载cookie...")
-            await browser_manager.load_cookies()
+            logger.info("浏览器已启动（登录态来自持久化 User Data）")
         
         # 获取页面
         page = await browser_manager.get_page()
@@ -629,11 +619,10 @@ async def debug_init_browser():
         current_url = page.url
         page_title = await page.title()
         
-        # 检查cookie是否加载成功
         cookies = await page.context.cookies()
         cookie_count = len(cookies)
-        
-        logger.info(f"成功进入小红书主页，当前URL: {current_url}, Cookie数量: {cookie_count}")
+
+        logger.info(f"成功进入小红书主页，当前URL: {current_url}, 当前上下文 Cookie 数量: {cookie_count}")
         
         return SuccessResponse(
             data={
@@ -641,7 +630,7 @@ async def debug_init_browser():
                 "url": current_url,
                 "title": page_title,
                 "cookie_count": cookie_count,
-                "message": "已成功加载cookie并进入小红书主页"
+                "message": "已成功进入小红书主页（持久化 profile）"
             },
             message="调试接口执行成功"
         )

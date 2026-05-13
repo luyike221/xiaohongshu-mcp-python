@@ -67,9 +67,8 @@ Docker Compose 配置会自动挂载以下目录和文件，确保数据持久�
 - `./data` - 数据目录
 - `./downloads` - 下载文件目录
 - `./logs` - 日志目录（已配置自动清理）
-- `./cookies.json` - Cookie 文件
-- `./cookies_luyike.json` - 用户 Cookie 文件
-- `./user_sessions.json` - 用户会话文件
+- `./browser-profile/` - 默认持久化 Chrome User Data（可通过 BROWSER_USER_DATA_DIR 修改）
+- `./user_sessions.json` - 用户会话映射文件
 - `./.env` - 环境变量文件（只读）
 
 ## 🗑️ 日志清理机制

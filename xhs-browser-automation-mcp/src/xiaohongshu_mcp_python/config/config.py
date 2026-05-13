@@ -49,9 +49,14 @@ class XiaohongshuSelectors:
     QR_CODE_IMAGE = ".qr-img img"
     LOGIN_SUCCESS_INDICATOR = ".user-info"
     
-    # 发布页面
-    PUBLISH_TAB = '//div[normalize-space(.)="上传图文"][@class="container"]'
-    VIDEO_PUBLISH_TAB = '//div[normalize-space(.)="上传视频"][contains(@class, "creator-tab")]'
+    # 发布页：hover「发布笔记」-> 点「上传图文」/「上传视频」；上传文件请对隐藏 input[type=file] 用 set_input_files，
+    # 勿点击 UPLOAD_IMAGE_BUTTON，否则会弹出系统原生文件框，Playwright 无法操作。
+    PUBLISH_MENU_HOVER = '//div[normalize-space(.)="发布笔记"][@class="btn-wrapper"]'
+    IMAGE_PUBLISH_TAB = '//div[normalize-space(.)="上传图文"][@class="container"]'
+    # 与历史代码兼容：PUBLISH_TAB 指「上传图文」子项，非 hover 目标
+    PUBLISH_TAB = IMAGE_PUBLISH_TAB
+    VIDEO_PUBLISH_TAB = '//div[normalize-space(.)="上传视频"][@class="container"]'
+    UPLOAD_IMAGE_BUTTON = '//button[normalize-space(.)="上传图片"]'  # 仅作文案/人工参考，自动化勿点击
     UPLOAD_INPUT = ".upload-input"
     UPLOADED_IMAGE = ".img-preview-area .pr"
     
@@ -177,9 +182,6 @@ class StorageConfig:
     # 项目根目录
     _project_root = get_project_root()
     
-    # Cookie 存储路径（相对于项目根目录）
-    COOKIE_DIR = _project_root / "cookies"
-    
     # 会话存储路径（相对于项目根目录）
     SESSION_DIR = _project_root / "sessions"
     
@@ -194,9 +196,6 @@ class StorageConfig:
     
     # 日志目录（相对于项目根目录）
     LOG_DIR = _project_root / "logs"
-    
-    # Cookie 过期时间（秒）
-    COOKIE_EXPIRE_TIME = 30 * 24 * 3600  # 30天
     
     # 会话过期时间（秒）
     SESSION_EXPIRE_TIME = 24 * 3600  # 24小时

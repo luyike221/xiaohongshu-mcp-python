@@ -175,19 +175,15 @@ ehthumbs.db
 Thumbs.db
 
 # Project specific
+# 持久化 Chrome User Data（MCP 专用，勿提交）
+browser-profile/
+browser-profile-users/
+browser-profile-sessions/
 screenshots/
 logs/
 temp/
 tmp/
 test/
-
-# Sensitive information - Cookies and session data
-# 敏感信息 - Cookies 和会话数据
-cookies/
-cookies.json
-cookies_*.json
-*.cookies
-*.cookie
 
 # User session data
 # 用户会话数据

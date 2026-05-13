@@ -111,14 +111,14 @@ class UserSessionStorage:
         """
         data = await self.load_user_sessions()
         user_session = data.get(username)
-        
-        if user_session:
-            # 检查会话是否过期
-            if self._is_session_expired(user_session):
-                logger.info(f"用户 {username} 的会话已过期")
-                await self.remove_user_session(username)
-                return None
-                
+
+        if user_session and self._is_session_expired(user_session):
+            logger.debug(
+                "用户 %s 的 user_sessions 元数据已过期，仍返回记录；"
+                "是否已登录以持久化 Chrome profile 校验为准",
+                username,
+            )
+
         return user_session
     
     async def set_user_session(self, username: str, session_id: str, 

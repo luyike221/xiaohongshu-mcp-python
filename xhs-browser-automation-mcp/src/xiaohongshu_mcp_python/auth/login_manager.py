@@ -12,44 +12,28 @@ from loguru import logger
 
 from ..browser.browser_manager import BrowserManager
 from ..browser.page_controller import PageController
-from ..storage.cookie_storage import CookieStorage
 from .login_types import LoginStatus, QRCodeInfo, LoginResult, LoginConfig
 
 
 class LoginManager:
-    """小红书登录管理器"""
-    
+    """小红书登录管理器（遗留入口；登录态依赖持久化 User Data）"""
+
     def __init__(
-        self, 
+        self,
         browser_manager: BrowserManager,
-        cookie_storage: CookieStorage,
-        config: Optional[LoginConfig] = None
+        config: Optional[LoginConfig] = None,
     ):
-        """
-        初始化登录管理器
-        
-        Args:
-            browser_manager: 浏览器管理器
-            cookie_storage: Cookie存储
-            config: 登录配置
-        """
         self.browser_manager = browser_manager
-        self.cookie_storage = cookie_storage
         self.config = config or LoginConfig()
         self.page_controller: Optional[PageController] = None
-    
+
     async def initialize(self) -> None:
-        """初始化登录管理器"""
         if not self.browser_manager.is_started():
             await self.browser_manager.start()
-        
-        # 获取页面控制器
+
         page = await self.browser_manager.get_page()
         self.page_controller = PageController(page)
-        
-        # 加载已保存的Cookie
-        await self.browser_manager.load_cookies()
-        
+
         logger.info("登录管理器初始化完成")
     
     async def check_login_status(self, navigate: bool = True) -> LoginStatus:
@@ -303,12 +287,10 @@ class LoginManager:
                 
                 if status == LoginStatus.LOGGED_IN:
                     logger.info("用户登录成功")
-                    
-                    cookies_saved = await self.browser_manager.save_cookies()
-                    
+
                     return LoginResult.success_result(
                         message="登录成功",
-                        cookies_saved=cookies_saved
+                        cookies_saved=True,
                     )
                 elif status == LoginStatus.UNKNOWN:
                     logger.debug("登录状态检查失败，继续等待")
@@ -362,31 +344,19 @@ class LoginManager:
             return LoginResult.failure_result(f"登录失败: {str(e)}")
     
     async def logout(self) -> bool:
-        """
-        登出（清除Cookie）
-        
-        Returns:
-            是否成功
-        """
         try:
-            # 清除Cookie文件
-            success = self.cookie_storage.clear_cookies()
-            
-            # 如果浏览器已启动，也清除浏览器中的Cookie
             if self.browser_manager.is_started():
                 page = await self.browser_manager.get_page()
-                context = page.context
-                await context.clear_cookies()
-            
-            logger.info("登出成功")
-            return success
-        
+                await page.context.clear_cookies()
+
+            logger.info("登出成功（仅清除当前上下文 Cookie）")
+            return True
+
         except Exception as e:
             logger.error(f"登出失败: {e}")
             return False
-    
+
     async def cleanup(self) -> None:
-        """清理资源"""
         if self.browser_manager.is_started():
             await self.browser_manager.stop()
         logger.info("登录管理器资源清理完成")

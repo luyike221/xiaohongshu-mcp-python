@@ -31,27 +31,49 @@ class PageController:
         
         Args:
             url: 目标URL
-            wait_until: 等待条件
+            wait_until: 等待条件；遇 net::ERR_ABORTED 时会自动换用更宽松条件并重试
         """
         logger.info(f"导航到: {url}")
-        try:
-            # 检查页面是否仍然有效
-            if self.page.is_closed():
-                logger.error("页面已关闭，无法导航")
-                raise Exception("页面已关闭，需要重新初始化浏览器")
-            
-            await self.page.goto(url, wait_until=wait_until, timeout=self.navigation_timeout)
-            logger.info("页面加载完成")
-        except PlaywrightTimeoutError:
-            logger.error(f"导航超时: {url}")
-            raise
-        except Exception as e:
-            error_msg = str(e)
-            if "Target page, context or browser has been closed" in error_msg or "page.is_closed" in error_msg:
-                logger.error("浏览器或页面已关闭，需要重新初始化")
-                raise Exception("浏览器已关闭，需要重新初始化")
-            logger.error(f"导航失败: {e}")
-            raise
+        if self.page.is_closed():
+            logger.error("页面已关闭，无法导航")
+            raise Exception("页面已关闭，需要重新初始化浏览器")
+
+        # 同一 URL 偶发 net::ERR_ABORTED（并发导航、扩展、首屏竞态）；换 wait_until 重试
+        wait_plan = [wait_until, "commit", "load"]
+        last_err: Optional[Exception] = None
+
+        for attempt in range(len(wait_plan)):
+            w = wait_plan[attempt]
+            try:
+                await self.page.goto(url, wait_until=w, timeout=self.navigation_timeout)
+                logger.info(f"页面加载完成 (wait_until={w})")
+                return
+            except PlaywrightTimeoutError:
+                logger.error(f"导航超时: {url}")
+                raise
+            except Exception as e:
+                last_err = e
+                err_l = str(e).lower()
+                if "target page" in err_l or "has been closed" in err_l or "browser has been closed" in err_l:
+                    logger.error("浏览器或页面已关闭，需要重新初始化")
+                    raise Exception("浏览器已关闭，需要重新初始化") from e
+                abort_like = "err_aborted" in err_l or (
+                    "navigation" in err_l and "aborted" in err_l
+                )
+                if abort_like and attempt < len(wait_plan) - 1:
+                    logger.warning(
+                        "导航第 {} 次失败 (wait_until={})，将换用更宽松策略重试: {}",
+                        attempt + 1,
+                        w,
+                        e,
+                    )
+                    await asyncio.sleep(0.45)
+                    continue
+                logger.error(f"导航失败: {e}")
+                raise
+
+        if last_err:
+            raise last_err
     
     def is_page_valid(self) -> bool:
         """检查页面是否仍然有效"""

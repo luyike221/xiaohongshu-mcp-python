@@ -28,6 +28,8 @@ services:
       
       # 用户配置
       - GLOBAL_USER=${GLOBAL_USER:-luyike}
+      - BROWSER_USER_DATA_DIR=${BROWSER_USER_DATA_DIR:-/app/browser-profile}
+      - BROWSER_CHROME_PROFILE_DIRECTORY=${BROWSER_CHROME_PROFILE_DIRECTORY:-Default}
       
       # 超时配置
       - PAGE_LOAD_TIMEOUT=${PAGE_LOAD_TIMEOUT:-60000}
@@ -37,9 +39,8 @@ services:
       - ./data:/app/data
       - ./downloads:/app/downloads
       - ./logs:/app/logs
-      # 持久化会话和 Cookie
-      - ./cookies.json:/app/cookies.json
-      - ./cookies_luyike.json:/app/cookies_luyike.json
+      # 持久化浏览器 profile 与会话映射
+      - ./browser-profile:/app/browser-profile
       - ./user_sessions.json:/app/user_sessions.json
       # 可选：挂载 .env 文件
       - ./.env:/app/.env:ro

@@ -3,7 +3,7 @@
 """
 
 from typing import Optional, List, Dict, Any, Union
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from datetime import datetime
 from enum import Enum
 
@@ -246,8 +246,26 @@ class PublishImageContent(BaseModel):
     """发布图文内容"""
     title: str = Field(..., min_length=1, max_length=20, description="标题，1-20个字符")
     content: str = Field(..., description="正文内容")
-    images: List[str] = Field(..., min_items=1, max_items=9, description="图片路径列表，1-9张图片")
+    images: List[str] = Field(
+        ...,
+        min_length=1,
+        max_length=9,
+        description="图片路径列表 1-9 张；可传单个字符串路径（与 ['path'] 等价）。Windows 在 JSON 中建议用正斜杠 C:/Users/... 或对反斜杠转义",
+    )
     tags: Optional[List[str]] = Field(default=None, description="标签列表")
+
+    @field_validator("images", mode="before")
+    @classmethod
+    def _coerce_images(cls, v: Any) -> List[str]:
+        from ..utils.image_processor import coerce_image_paths_arg
+
+        if isinstance(v, dict):
+            for key in ("path", "url", "src", "image"):
+                val = v.get(key)
+                if val is not None and str(val).strip():
+                    return coerce_image_paths_arg([str(val).strip()])
+            return coerce_image_paths_arg([])
+        return coerce_image_paths_arg(v)
 
 
 class PublishVideoContent(BaseModel):

@@ -14,7 +14,8 @@ CYAN='\033[0;36m'
 NC='\033[0m' # No Color
 
 # 默认配置
-DEFAULT_HOST="localhost"
+# Align with uvicorn binding 127.0.0.1; "localhost" may resolve to ::1 and fail to connect
+DEFAULT_HOST="127.0.0.1"
 DEFAULT_PORT="8003"
 MCP_ENDPOINT="/mcp"
 

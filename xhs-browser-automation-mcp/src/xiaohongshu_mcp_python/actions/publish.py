@@ -266,19 +266,20 @@ class PublishAction:
                 
                 # 2. 判断是否可以hover（尝试hover到按钮容器）
                 try:
-                    logger.info(f"第 {attempt} 次检测：尝试查找按钮容器...")
-                    btn_element = await self.page.query_selector('//div[@class="btn"]')
+                    logger.info(f"第 {attempt} 次检测：尝试查找「发布笔记」入口...")
+                    btn_element = await self.page.query_selector(
+                        XiaohongshuSelectors.PUBLISH_MENU_HOVER
+                    )
                     if btn_element:
-                        # 尝试hover，如果成功说明页面准备好了
-                        logger.info(f"第 {attempt} 次检测：找到按钮容器，尝试hover...")
+                        logger.info(f"第 {attempt} 次检测：找到「发布笔记」，尝试 hover...")
                         await btn_element.hover()
-                        logger.info(f"第 {attempt} 次检测：成功hover到按钮容器，页面已准备好")
+                        logger.info(f"第 {attempt} 次检测：成功 hover，页面已准备好")
                         page_ready = True
                         break
                     else:
-                        logger.info(f"第 {attempt} 次检测：未找到按钮容器，继续等待")
+                        logger.info(f"第 {attempt} 次检测：未找到「发布笔记」入口，继续等待")
                 except Exception as e:
-                    logger.info(f"第 {attempt} 次检测：hover失败 - {e}")
+                    logger.info(f"第 {attempt} 次检测：hover 失败 - {e}")
                 
             except Exception as e:
                 logger.info(f"第 {attempt} 次检测出现异常: {e}")
@@ -298,76 +299,65 @@ class PublishAction:
             await context.report_progress(progress=10, total=100)
     
     async def _select_image_publish_tab(self):
-        """选择图文发布标签"""
-        logger.info("选择图文发布标签")
-        
+        """hover「发布笔记」后点击「上传图文」"""
+        logger.info("hover 发布笔记入口并选择上传图文")
+
         try:
-            # 步骤1: 先 hover 到按钮容器
-            logger.debug("悬停到按钮容器")
-            btn_element = await self.page.wait_for_selector(
-                '//div[@class="btn"]',
-                timeout=BrowserConfig.ELEMENT_TIMEOUT
+            hover_target = await self.page.wait_for_selector(
+                XiaohongshuSelectors.PUBLISH_MENU_HOVER,
+                timeout=BrowserConfig.ELEMENT_TIMEOUT,
             )
-            
-            if btn_element:
-                await btn_element.hover()
-                await asyncio.sleep(0.3)  # 等待悬停效果
-                logger.debug("已悬停到按钮容器")
+            if hover_target:
+                await hover_target.hover()
+                await asyncio.sleep(0.4)
+                logger.debug("已 hover 发布笔记")
             else:
-                logger.warning("未找到按钮容器，直接尝试点击图文标签")
-            
-            # 步骤2: 点击图文发布标签
-            logger.debug("点击图文发布标签")
+                logger.warning("未找到「发布笔记」入口，直接尝试点击上传图文")
+
             tab_element = await self.page.wait_for_selector(
-                XiaohongshuSelectors.PUBLISH_TAB,
-                timeout=BrowserConfig.ELEMENT_TIMEOUT
+                XiaohongshuSelectors.IMAGE_PUBLISH_TAB,
+                timeout=BrowserConfig.ELEMENT_TIMEOUT,
             )
-            
             if tab_element:
                 await tab_element.click()
-                await asyncio.sleep(1)  # 等待标签切换
-                logger.info("已选择图文发布标签")
+                await asyncio.sleep(0.8)
+                logger.info("已点击上传图文")
             else:
-                raise Exception("找不到图文发布标签")
-                
+                raise Exception("找不到「上传图文」入口")
+
         except PlaywrightTimeoutError:
-            raise Exception("等待图文发布标签超时")
+            raise Exception("等待发布菜单或上传图文超时")
     
     async def _select_video_publish_tab(self):
-        """选择视频发布标签"""
-        logger.info("选择视频发布标签")
-        
+        """hover「发布笔记」后点击「上传视频」"""
+        logger.info("hover 发布笔记入口并选择上传视频")
+
         try:
-            # 步骤1: 先 hover 到按钮容器
-            logger.debug("悬停到按钮容器")
-            btn_element = await self.page.wait_for_selector(
-                '//div[@class="btn"]',
-                timeout=BrowserConfig.ELEMENT_TIMEOUT
+            hover_target = await self.page.wait_for_selector(
+                XiaohongshuSelectors.PUBLISH_MENU_HOVER,
+                timeout=BrowserConfig.ELEMENT_TIMEOUT,
             )
-            
-            if btn_element:
-                await btn_element.hover()
-                await asyncio.sleep(0.3)  # 等待悬停效果
-                logger.debug("已悬停到按钮容器")
+            if hover_target:
+                await hover_target.hover()
+                await asyncio.sleep(0.4)
+                logger.debug("已 hover 发布笔记")
             else:
-                logger.warning("未找到按钮容器，直接尝试点击视频标签")
-            
-            # 步骤2: 点击视频发布标签
-            logger.debug("点击视频发布标签")
+                logger.warning("未找到「发布笔记」入口，直接尝试点击上传视频")
+
             video_tab = await self.page.wait_for_selector(
-                '//div[normalize-space(.)="上传视频"][@class="container"]',
-                timeout=BrowserConfig.ELEMENT_TIMEOUT
+                XiaohongshuSelectors.VIDEO_PUBLISH_TAB,
+                timeout=BrowserConfig.ELEMENT_TIMEOUT,
             )
-            
+
             if video_tab:
                 await video_tab.click()
-                await asyncio.sleep(1)  # 等待标签切换
-                logger.info("已选择视频发布标签")
+                await asyncio.sleep(0.8)
+                logger.info("已点击上传视频")
             else:
-                raise Exception("找不到视频发布标签")
-                
+                raise Exception("找不到上传视频入口")
+
         except PlaywrightTimeoutError:
-            raise Exception("等待视频发布标签超时")
+            raise Exception("等待发布菜单或上传视频超时")
     
     async def _ensure_on_publish_page(self, timeout_seconds: int = 10):
         """确保当前停留在发布页面"""
@@ -470,86 +460,97 @@ class PublishAction:
     async def _upload_images(self, image_paths: List[str]):
         """
         上传图片
-        
-        Args:
-            image_paths: 图片路径列表
+
+        注意：不要点击「上传图片」等会唤起 **系统原生文件选择框** 的按钮；
+        Playwright 只能对页面内的 <input type=file> 调用 set_input_files，无法控制 Windows 对话框。
         """
         if not image_paths:
             raise Exception("图片路径列表不能为空")
-        
+
         # 验证文件存在性
         for path in image_paths:
             if not os.path.exists(path):
                 raise Exception(f"图片文件不存在: {path}")
-        
-        logger.info(f"开始上传 {len(image_paths)} 张图片")
-        
+
+        logger.info(
+            f"开始上传 {len(image_paths)} 张图片（直接绑定隐藏 file input，不点击唤起系统文件框的按钮）"
+        )
+
         try:
-            # 等待上传输入框
-            upload_input = await self.page.wait_for_selector(
-                XiaohongshuSelectors.UPLOAD_INPUT,
-                timeout=BrowserConfig.ELEMENT_TIMEOUT
-            )
-            
-            if not upload_input:
-                raise Exception("找不到图片上传输入框")
-            
+            upload_locator = await self._wait_for_image_file_input_locator()
+
             # 尝试批量上传所有图片
             try:
                 logger.info(f"尝试批量上传 {len(image_paths)} 张图片")
-                await upload_input.set_input_files(image_paths)
+                await upload_locator.set_input_files(image_paths)
                 logger.info("批量上传成功，等待所有图片上传完成")
             except Exception as e:
-                # 如果批量上传失败，尝试逐个上传
                 error_msg = str(e)
                 if "Non-multiple" in error_msg or "single file" in error_msg.lower():
                     logger.warning(f"输入框不支持批量上传，改为逐个上传: {error_msg}")
-                    # 逐个上传
                     for index, image_path in enumerate(image_paths, 1):
                         logger.info(f"上传第 {index}/{len(image_paths)} 张图片: {image_path}")
-                        
-                        # 每次上传前重新查找上传输入框（因为上传后DOM可能会变化）
-                        upload_input = await self.page.wait_for_selector(
-                            XiaohongshuSelectors.UPLOAD_INPUT,
-                            timeout=BrowserConfig.ELEMENT_TIMEOUT
+
+                        upload_locator = await self._wait_for_image_file_input_locator()
+                        await upload_locator.wait_for(
+                            state="attached",
+                            timeout=BrowserConfig.ELEMENT_TIMEOUT,
                         )
-                        
-                        if not upload_input:
-                            raise Exception(f"找不到图片上传输入框（第 {index} 张）")
-                        
-                        # 逐个上传
-                        await upload_input.set_input_files([image_path])
-                        
-                        # 等待当前图片上传完成（检查已上传的图片数量）
-                        await asyncio.sleep(1)  # 给一点时间让上传开始
-                        
-                        # 等待上传进度更新
-                        max_wait = 10  # 最多等待10秒
+                        await upload_locator.set_input_files([image_path])
+
+                        await asyncio.sleep(1)
+
+                        max_wait = 10
                         waited = 0
                         while waited < max_wait:
-                            uploaded_count = len(await self.page.query_selector_all(
-                                XiaohongshuSelectors.UPLOADED_IMAGE
-                            ))
+                            uploaded_count = len(
+                                await self.page.query_selector_all(
+                                    XiaohongshuSelectors.UPLOADED_IMAGE
+                                )
+                            )
                             if uploaded_count >= index:
                                 logger.info(f"第 {index} 张图片上传完成")
                                 break
                             await asyncio.sleep(0.5)
                             waited += 0.5
-                        
-                        # 如果不是最后一张，等待一小段时间再上传下一张
+
                         if index < len(image_paths):
                             await asyncio.sleep(0.5)
                 else:
-                    # 其他错误，直接抛出
                     raise
-            
-            # 等待所有图片上传完成
+
             await self._wait_for_upload_complete(len(image_paths))
-            
+
             logger.info("所有图片上传完成")
-            
+
         except PlaywrightTimeoutError:
-            raise Exception("等待图片上传输入框超时")
+            raise Exception("等待图片上传用 file input 超时（请确认已切到「上传图文」编辑区）")
+
+    async def _wait_for_image_file_input_locator(self):
+        """
+        等待图文上传区域的 file input 出现在 DOM（可为隐藏）。
+        不依赖点击「上传图片」按钮，避免弹出系统原生文件对话框。
+        """
+        selectors = [
+            "input.upload-input[type='file']",
+            "input[type='file'].upload-input",
+            "input.upload-input",
+            "input[type=file]",
+        ]
+        last_err: Optional[Exception] = None
+        per_try = min(15000, BrowserConfig.UPLOAD_TIMEOUT // max(1, len(selectors)))
+        for sel in selectors:
+            loc = self.page.locator(sel).first
+            try:
+                await loc.wait_for(state="attached", timeout=per_try)
+                logger.debug(f"已定位 file input: {sel}")
+                return loc
+            except Exception as e:
+                last_err = e
+                continue
+        if last_err:
+            raise last_err
+        raise Exception("找不到图片上传 file input")
     
     async def _upload_video(self, video_path: str, cover_path: Optional[str] = None):
         """

@@ -3,6 +3,7 @@ MCP 工具函数模块
 包含所有 MCP 工具接口的实现
 """
 
+import json
 from typing import Optional, Union, List
 from loguru import logger
 from fastmcp import Context, FastMCP
@@ -10,13 +11,52 @@ from fastmcp import Context, FastMCP
 from ..services.service import XiaohongshuService
 from ..config import BrowserConfig, PublishImageContent, PublishVideoContent, settings
 from ..browser import BrowserManager
-from ..storage.cookie_storage import CookieStorage
 from ..managers.user_session_manager import get_user_session_manager
-from ..utils.auth_helpers import check_user_login_status
 
 
 # 创建 FastMCP 实例（需要在导入时创建，以便工具函数可以注册）
 mcp = FastMCP("xiaohongshu-mcp-server")
+
+
+def _clip_publish_title(s: str, max_len: int = 20) -> str:
+    """与 PublishImageContent.title 的 max_length 对齐。"""
+    if len(s) <= max_len:
+        return s
+    return s[:max_len]
+
+
+def _parse_debug_publish_images_raw(raw: str) -> List[str]:
+    """解析 MCP_DEBUG_PUBLISH_IMAGES：JSON 数组或单一路径字符串。"""
+    if not (raw or "").strip():
+        return []
+    raw = raw.strip()
+    if raw.startswith("["):
+        try:
+            data = json.loads(raw)
+        except json.JSONDecodeError:
+            logger.warning("MCP_DEBUG_PUBLISH_IMAGES JSON 解析失败，忽略")
+            return []
+        if not isinstance(data, list):
+            return []
+        return [str(x).strip() for x in data if str(x).strip()]
+    return [raw]
+
+
+def _parse_debug_publish_tags_raw(raw: str) -> List[str]:
+    """解析 MCP_DEBUG_PUBLISH_TAGS：JSON 数组或逗号分隔。"""
+    if not (raw or "").strip():
+        return []
+    raw = raw.strip()
+    if raw.startswith("["):
+        try:
+            data = json.loads(raw)
+        except json.JSONDecodeError:
+            logger.warning("MCP_DEBUG_PUBLISH_TAGS JSON 解析失败，忽略")
+            return []
+        if not isinstance(data, list):
+            return []
+        return [str(x).strip() for x in data if str(x).strip()]
+    return [t.strip() for t in raw.split(",") if t.strip()]
 
 
 def normalize_tags(tags: Optional[List[str]]) -> List[str]:
@@ -64,52 +104,60 @@ async def xiaohongshu_debug_init_browser(
     username: Optional[str] = None
 ) -> dict:
     """
-    调试接口：加载cookie并进入小红书主页
-    
-    功能：
-    1. 加载已保存的cookie
-    2. 启动浏览器（如果未启动）
-    3. 导航到小红书主页
-    4. 返回操作结果
-    
+    调试接口：使用持久化浏览器 profile 进入小红书主页。
+
     Args:
         username: 用户名（可选，如果不提供则使用全局用户）
-        
+
     Returns:
         包含操作结果的字典
     """
     try:
         current_user = username or settings.GLOBAL_USER
         logger.info(f"调试接口：为用户 {current_user} 初始化浏览器并进入主页")
-        
-        # 创建浏览器管理器，使用用户的cookie存储
-        user_cookie_storage = CookieStorage(f"cookies_{current_user}.json")
+
         browser_manager = BrowserManager(
-            cookie_storage=user_cookie_storage,
-            headless=settings.BROWSER_HEADLESS
+            headless=settings.BROWSER_HEADLESS,
+            profile_user=current_user,
         )
         
-        # 确保浏览器已启动
-        if not browser_manager.is_started():
-            logger.info("浏览器未启动，正在启动...")
-            await browser_manager.start()
-        else:
-            # 如果已启动，重新加载cookie
-            logger.info("浏览器已启动，重新加载cookie...")
-            await browser_manager.load_cookies()
-        
-        # 获取页面
+        # 确保浏览器已启动且连接有效（避免仅 is_started 为真但进程已崩溃）
+        await browser_manager.ensure_started()
+
         page = await browser_manager.get_page()
-        
-        # 导航到小红书主页
+
         homepage_url = "https://www.xiaohongshu.com/explore"
         logger.info(f"正在导航到小红书主页: {homepage_url}")
-        await page.goto(
-            homepage_url,
-            wait_until="domcontentloaded",
-            timeout=BrowserConfig.PAGE_LOAD_TIMEOUT,
-        )
-        logger.info(f"成功进入小红书主页")
+
+        def _looks_like_browser_closed(exc: BaseException) -> bool:
+            name = type(exc).__name__.lower()
+            msg = str(exc).lower()
+            return (
+                "targetclosed" in name
+                or "targetclosederror" in name
+                or "has been closed" in msg
+                or "browser has been closed" in msg
+            )
+
+        for attempt in range(2):
+            try:
+                await page.goto(
+                    homepage_url,
+                    wait_until="domcontentloaded",
+                    timeout=BrowserConfig.PAGE_LOAD_TIMEOUT,
+                )
+                logger.info("成功进入小红书主页")
+                break
+            except Exception as e:
+                if attempt == 0 and _looks_like_browser_closed(e):
+                    logger.warning(
+                        "导航时浏览器或页面已断开，正在重启浏览器后重试一次: {}",
+                        e,
+                    )
+                    await browser_manager.restart()
+                    page = await browser_manager.get_page()
+                    continue
+                raise
         
         # 注意：这里不关闭浏览器，保持浏览器运行状态以便调试
         # 如果需要关闭，可以调用 await browser_manager.stop()
@@ -118,7 +166,7 @@ async def xiaohongshu_debug_init_browser(
             "success": True,
             "status": "success",
             "username": current_user,
-            "message": "已成功加载cookie并进入小红书主页"
+            "message": "已成功进入小红书主页（持久化 profile）"
         }
         
     except Exception as e:
@@ -136,11 +184,11 @@ async def xiaohongshu_debug_init_browser(
 @mcp.tool
 async def xiaohongshu_start_login_session(headless: bool = False, fresh: bool = False, username: Optional[str] = None) -> dict:
     """
-    启动小红书登录会话（基于本地 cookies）
+    启动小红书登录会话（持久化浏览器 profile + user_sessions 记录）
     
     Args:
         headless: 是否使用无头模式，默认False（显示浏览器界面）
-        fresh: 是否强制创建新会话，默认False（复用现有 cookies）
+        fresh: 是否强制清理该用户会话并重新登录，默认 False
         username: 用户名，如果不提供则使用全局用户
         
     Returns:
@@ -154,18 +202,18 @@ async def xiaohongshu_start_login_session(headless: bool = False, fresh: bool = 
         user_session_manager = get_user_session_manager()
         
         if fresh:
-            # 强制创建新会话，先清理现有 cookies 和会话
-            logger.info(f"fresh=True，清理用户 {current_user} 的现有 cookies 和会话")
+            # 强制创建新会话：清理会话记录与专用 profile
+            logger.info(f"fresh=True，清理用户 {current_user} 的现有会话与专用 profile（若有）")
             await user_session_manager.cleanup_user_session(current_user)
         
-        # 获取或创建用户会话（阻塞等待登录完成）
-        # 如果本地 cookies 有效，会直接返回已登录状态
+        # 阻塞等待登录完成；若 user_sessions 中已有有效记录会直接返回已登录
         # 如果 headless 未指定，使用 settings 中的配置
         effective_headless = headless if headless is not None else settings.BROWSER_HEADLESS
         result = await user_session_manager.get_or_create_session(
             username=current_user,
             headless=effective_headless,
-            wait_for_completion=True  # 阻塞等待登录完成
+            wait_for_completion=True,
+            fresh=fresh,
         )
         
         if "error" in result:
@@ -185,7 +233,7 @@ async def xiaohongshu_start_login_session(headless: bool = False, fresh: bool = 
             if is_new_session:
                 message = result.get("message", "登录成功")
             else:
-                message = f"使用本地 cookies，用户已登录（无需重新登录）"
+                message = "使用本地浏览器 profile，用户已登录（无需重新登录）"
             
             return {
                 "success": True,
@@ -228,7 +276,7 @@ async def xiaohongshu_start_login_session(headless: bool = False, fresh: bool = 
 @mcp.tool
 async def xiaohongshu_check_login_session(username: Optional[str] = None) -> dict:
     """
-    检查登录会话状态（基于本地 cookies）
+    检查登录会话状态（以持久化 Chrome profile 内页面校验为准）
     
     Args:
         username: 用户名（可选，如果不提供则使用全局用户）
@@ -240,7 +288,6 @@ async def xiaohongshu_check_login_session(username: Optional[str] = None) -> dic
         user_session_manager = get_user_session_manager()
         current_user = username or settings.GLOBAL_USER
         
-        # 检查本地 cookies 状态
         user_session_status = await user_session_manager.get_user_session_status(current_user)
         
         if not user_session_status:
@@ -248,7 +295,7 @@ async def xiaohongshu_check_login_session(username: Optional[str] = None) -> dic
                 "success": False,
                 "status": "no_session",
                 "username": current_user,
-                "message": f"用户 {current_user} 没有本地 cookies，请先登录",
+                "message": f"用户 {current_user} 在持久化浏览器 profile 中未检测到已登录，请先使用 xiaohongshu_start_login_session 登录",
                 "logged_in": False
             }
         
@@ -318,10 +365,10 @@ async def xiaohongshu_cleanup_login_session(username: Optional[str] = None) -> d
 
 @mcp.tool
 async def xiaohongshu_publish_content(
-    title: str,
-    content: str,
-    images: Optional[list[str]],
-    tags: Optional[list[str]] ,
+    title: Optional[str] = None,
+    content: Optional[str] = None,
+    images: Optional[Union[str, List[str]]] = None,
+    tags: Optional[list[str]] = None,
     username: Optional[str] = None,
     context: Optional[Context] = None
 ) -> dict:
@@ -329,57 +376,62 @@ async def xiaohongshu_publish_content(
     发布小红书图文内容
     
     Args:
-        title: 内容标题（最多20个中文字或英文单词）
-        content: 正文内容，不包含以#开头的标签内容
-        images: 图片路径数组，默认 []。支持HTTP/HTTPS图片链接或本地图片绝对路径（至少需要1张图片）
-        tags: 话题标签数组，默认 []。如 ["美食", "旅行", "生活"]，标签中的 # 号会自动移除
+        title: 内容标题（最多20个中文字或英文单词）；可省略，空时用 Settings / .env 调试缺省
+        content: 正文内容，不包含以#开头的标签内容；可省略，空时用调试缺省
+        images: 本地绝对路径或图片 URL。可为字符串单路径，或数组 ['path1','path2']。
+                Windows：在 JSON 中请使用正斜杠 `C:/Users/.../a.png`，或对反斜杠双重转义；
+                单独一个反斜杠在 JSON 里会被当成转义符，导致路径损坏。
+                可省略；空时用环境变量 MCP_DEBUG_PUBLISH_IMAGES（单路径或 JSON 数组）
+        tags: 话题标签数组，默认 []。如 ["美食", "旅行", "生活"]，标签中的 # 号会自动移除；
+              全空时用 MCP_DEBUG_PUBLISH_TAGS 或占位「调试」
         username: 用户名（可选，如果不提供则使用全局用户）
         
     Returns:
         发布结果
     """
     try:
-        # 处理默认值
         if images is None:
             images = []
         if tags is None:
             tags = []
-        
+
+        t = (title or "").strip()
+        c = (content or "").strip()
+        if not t:
+            t = _clip_publish_title(settings.MCP_DEBUG_PUBLISH_TITLE)
+        if not c:
+            c = settings.MCP_DEBUG_PUBLISH_CONTENT
+        title, content = t, c
+
+        if isinstance(images, str):
+            if not images.strip():
+                images_list: List[str] = []
+            else:
+                images_list = [images.strip()]
+        else:
+            images_list = [str(x).strip() for x in (images or []) if str(x).strip()]
+
+        if not images_list:
+            images_list = _parse_debug_publish_images_raw(settings.MCP_DEBUG_PUBLISH_IMAGES_RAW)
+        images = images_list
+
         # 记录接收到的参数（用于调试）
-        logger.info(f"收到发布请求 - title: {title}, content长度: {len(content)}, images数量: {len(images)}, tags: {tags} (类型: {type(tags)})")
+        logger.info(
+            f"收到发布请求 - title: {title}, content长度: {len(content)}, "
+            f"images数量: {len(images)}, tags: {tags} (类型: {type(tags)})"
+        )
         
         current_user = username or settings.GLOBAL_USER
         
-        # 发送进度通知：开始检查登录状态
         if context:
-            await context.report_progress(
-                progress=10,
-                total=100
-            )
+            await context.report_progress(progress=15, total=100)
         
-        # 检查用户登录状态（基于本地 cookies）
-        login_check = await check_user_login_status(current_user)
-        if not login_check.get("valid", False):
-            return login_check
-        
-        # 发送进度通知：开始启动浏览器
-        if context:
-            await context.report_progress(
-                progress=20,
-                total=100
-            )
-        
-        # 创建浏览器管理器，使用用户的cookie存储
-        user_cookie_storage = CookieStorage(f"cookies_{current_user}.json")
         browser_manager = BrowserManager(
-            cookie_storage=user_cookie_storage,
-            headless=settings.BROWSER_HEADLESS
+            headless=settings.BROWSER_HEADLESS,
+            profile_user=current_user,
         )
         await browser_manager.start()
-        
-        # 加载用户的cookies
-        await browser_manager.load_cookies()
-        logger.info(f"已为用户 {current_user} 加载cookies")
+        logger.info(f"已为用户 {current_user} 启动持久化浏览器上下文")
         
         try:
             service = XiaohongshuService(browser_manager)
@@ -391,8 +443,14 @@ async def xiaohongshu_publish_content(
                     total=100
                 )
             
-            # 规范化标签参数
+            # 规范化标签参数；全空时用 .env 或占位
             normalized_tags = normalize_tags(tags)
+            if not normalized_tags:
+                normalized_tags = normalize_tags(
+                    _parse_debug_publish_tags_raw(settings.MCP_DEBUG_PUBLISH_TAGS_RAW)
+                )
+            if not normalized_tags:
+                normalized_tags = normalize_tags(["调试"])
             logger.info(f"规范化后的标签: {normalized_tags}")
             
             # 构建发布请求
@@ -460,36 +518,15 @@ async def xiaohongshu_publish_video(
         
         current_user = username or settings.GLOBAL_USER
         
-        # 发送进度通知：开始检查登录状态
         if context:
-            await context.report_progress(
-                progress=10,
-                total=100
-            )
+            await context.report_progress(progress=15, total=100)
         
-        # 检查用户登录状态（基于本地 cookies）
-        login_check = await check_user_login_status(current_user)
-        if not login_check.get("valid", False):
-            return login_check
-        
-        # 发送进度通知：开始启动浏览器
-        if context:
-            await context.report_progress(
-                progress=20,
-                total=100
-            )
-        
-        # 创建浏览器管理器，使用用户的cookie存储
-        user_cookie_storage = CookieStorage(f"cookies_{current_user}.json")
         browser_manager = BrowserManager(
-            cookie_storage=user_cookie_storage,
-            headless=settings.BROWSER_HEADLESS
+            headless=settings.BROWSER_HEADLESS,
+            profile_user=current_user,
         )
         await browser_manager.start()
-        
-        # 加载用户的cookies
-        await browser_manager.load_cookies()
-        logger.info(f"已为用户 {current_user} 加载cookies")
+        logger.info(f"已为用户 {current_user} 启动持久化浏览器上下文")
         
         try:
             service = XiaohongshuService(browser_manager)
@@ -559,22 +596,12 @@ async def xiaohongshu_search_feeds(
     try:
         current_user = username or settings.GLOBAL_USER
         
-        # 检查用户登录状态（基于本地 cookies）
-        login_check = await check_user_login_status(current_user)
-        if not login_check.get("valid", False):
-            return login_check
-        
-        # 创建浏览器管理器，使用用户的cookie存储
-        user_cookie_storage = CookieStorage(f"cookies_{current_user}.json")
         browser_manager = BrowserManager(
-            cookie_storage=user_cookie_storage,
-            headless=settings.BROWSER_HEADLESS
+            headless=settings.BROWSER_HEADLESS,
+            profile_user=current_user,
         )
         await browser_manager.start()
-        
-        # 加载用户的cookies
-        await browser_manager.load_cookies()
-        logger.info(f"已为用户 {current_user} 加载cookies")
+        logger.info(f"已为用户 {current_user} 启动持久化浏览器上下文")
         
         try:
             service = XiaohongshuService(browser_manager)
@@ -616,22 +643,12 @@ async def xiaohongshu_get_feeds(
     try:
         current_user = username or settings.GLOBAL_USER
         
-        # 检查用户登录状态（基于本地 cookies）
-        login_check = await check_user_login_status(current_user)
-        if not login_check.get("valid", False):
-            return login_check
-        
-        # 创建浏览器管理器，使用用户的cookie存储
-        user_cookie_storage = CookieStorage(f"cookies_{current_user}.json")
         browser_manager = BrowserManager(
-            cookie_storage=user_cookie_storage,
-            headless=settings.BROWSER_HEADLESS
+            headless=settings.BROWSER_HEADLESS,
+            profile_user=current_user,
         )
         await browser_manager.start()
-        
-        # 加载用户的cookies
-        await browser_manager.load_cookies()
-        logger.info(f"已为用户 {current_user} 加载cookies")
+        logger.info(f"已为用户 {current_user} 启动持久化浏览器上下文")
         
         try:
             service = XiaohongshuService(browser_manager)
@@ -673,8 +690,10 @@ async def xiaohongshu_list_feeds(
     try:
         current_user = username or settings.GLOBAL_USER
         
-        # 创建浏览器管理器和服务实例
-        browser_manager = BrowserManager(headless=settings.BROWSER_HEADLESS)
+        browser_manager = BrowserManager(
+            headless=settings.BROWSER_HEADLESS,
+            profile_user=current_user,
+        )
         await browser_manager.start()
         
         try:
@@ -721,22 +740,12 @@ async def xiaohongshu_get_user_profile(
     try:
         current_user = username or settings.GLOBAL_USER
         
-        # 检查用户登录状态（基于本地 cookies）
-        login_check = await check_user_login_status(current_user)
-        if not login_check.get("valid", False):
-            return login_check
-        
-        # 创建浏览器管理器，使用用户的cookie存储
-        user_cookie_storage = CookieStorage(f"cookies_{current_user}.json")
         browser_manager = BrowserManager(
-            cookie_storage=user_cookie_storage,
-            headless=settings.BROWSER_HEADLESS
+            headless=settings.BROWSER_HEADLESS,
+            profile_user=current_user,
         )
         await browser_manager.start()
-        
-        # 加载用户的cookies
-        await browser_manager.load_cookies()
-        logger.info(f"已为用户 {current_user} 加载cookies")
+        logger.info(f"已为用户 {current_user} 启动持久化浏览器上下文")
         
         try:
             service = XiaohongshuService(browser_manager)
@@ -790,22 +799,12 @@ async def xiaohongshu_get_feed_detail(
     try:
         current_user = username or settings.GLOBAL_USER
         
-        # 检查用户登录状态（基于本地 cookies）
-        login_check = await check_user_login_status(current_user)
-        if not login_check.get("valid", False):
-            return login_check
-        
-        # 创建浏览器管理器，使用用户的cookie存储
-        user_cookie_storage = CookieStorage(f"cookies_{current_user}.json")
         browser_manager = BrowserManager(
-            cookie_storage=user_cookie_storage,
-            headless=settings.BROWSER_HEADLESS
+            headless=settings.BROWSER_HEADLESS,
+            profile_user=current_user,
         )
         await browser_manager.start()
-        
-        # 加载用户的cookies
-        await browser_manager.load_cookies()
-        logger.info(f"已为用户 {current_user} 加载cookies")
+        logger.info(f"已为用户 {current_user} 启动持久化浏览器上下文")
         
         try:
             service = XiaohongshuService(browser_manager)

@@ -50,6 +50,15 @@ class Settings:
     # - Google Chrome: /usr/bin/google-chrome 或 /usr/bin/google-chrome-stable
     # - Chromium: /usr/bin/chromium 或 /usr/bin/chromium-browser
     BROWSER_EXECUTABLE_PATH: str | None = os.getenv("BROWSER_EXECUTABLE_PATH", None)
+
+    # Chrome/Chromium 用户数据目录（持久化登录态）。勿指向日常 Chrome 的 User Data。
+    # 留空时默认为项目根下 browser-profile（相对路径相对于项目根）。
+    _bud = os.getenv("BROWSER_USER_DATA_DIR", "").strip()
+    BROWSER_USER_DATA_DIR: str = _bud if _bud else "browser-profile"
+
+    # Chrome profile 目录名：Default、Profile 1 等
+    _bprof = os.getenv("BROWSER_CHROME_PROFILE_DIRECTORY", "").strip()
+    BROWSER_CHROME_PROFILE_DIRECTORY: str = _bprof if _bprof else "Default"
     
     # 日志配置
     LOG_LEVEL: str = os.getenv("LOG_LEVEL", "DEBUG" if IS_DEVELOPMENT else "INFO")
@@ -83,6 +92,17 @@ class Settings:
     # 发布测试配置
     # 如果设置为 true，发布时会阻塞，不点击发布按钮（用于测试）
     PUBLISH_BLOCK_TEST: bool = os.getenv("PUBLISH_BLOCK_TEST", "false").lower() in ("true", "1", "yes")
+
+    # MCP 调试发布缺省（工具层：参数为空时用；Inspector 可省略字段）
+    # 标题最多 20 字符（与 PublishImageContent 一致）；留空则用内置短占位
+    _mdpt = os.getenv("MCP_DEBUG_PUBLISH_TITLE", "").strip()
+    MCP_DEBUG_PUBLISH_TITLE: str = _mdpt if _mdpt else "MCP调试发布"
+    _mdpc = os.getenv("MCP_DEBUG_PUBLISH_CONTENT", "").strip()
+    MCP_DEBUG_PUBLISH_CONTENT: str = _mdpc if _mdpc else "MCP 调试正文"
+    # 单路径，或 JSON 数组，如 ["C:/a.png","C:/b.png"]；未配置且调用方未传图则发布校验会失败
+    MCP_DEBUG_PUBLISH_IMAGES_RAW: str = os.getenv("MCP_DEBUG_PUBLISH_IMAGES", "").strip()
+    # 逗号分隔或 JSON 数组，如 ["美食","旅行"]；未配置且未传 tags 时用 ["调试"]
+    MCP_DEBUG_PUBLISH_TAGS_RAW: str = os.getenv("MCP_DEBUG_PUBLISH_TAGS", "").strip()
     
     @classmethod
     def get_summary(cls) -> dict:
